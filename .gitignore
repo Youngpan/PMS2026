@@ -11,6 +11,11 @@ node_modules/
 dist/
 *.tsbuildinfo
 .vite/
+# tsc/vue-tsc 编译产物（源码是 .ts/.vue，noEmit 已开；tsconfig.node.json 的 composite 仍会 emit vite.config.*）
+pms-web/src/**/*.js
+pms-web/src/**/*.vue.js
+pms-web/vite.config.js
+pms-web/vite.config.d.ts
 
 # ---- IDE ----
 .idea/
