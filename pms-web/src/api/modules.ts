@@ -11,8 +11,12 @@ export const authApi = {
 export const roomApi = {
   page: (params: any) => request.get('/rooms', { params }),
   create: (data: any) => request.post('/rooms', data),
-  changeStatus: (id: number, status: string) =>
-    request.put(`/rooms/${id}/status`, { status }),
+  setRentStatus: (id: number, rent_status: string) =>
+    request.put(`/rooms/${id}/rent-status`, { rent_status }),
+  setCleanStatus: (id: number, clean_status: string) =>
+    request.put(`/rooms/${id}/clean-status`, { clean_status }),
+  setRemark: (id: number, remark: string) =>
+    request.put(`/rooms/${id}/remark`, { remark }),
   vacant: (room_type_id?: number) =>
     request.get('/rooms/vacant', { params: { room_type_id } }),
   types: () => request.get('/room-types'),
@@ -34,8 +38,9 @@ export const stayApi = {
   checkin: (data: any) => request.post('/stays/checkins', data),
   inHouse: () => request.get('/stays'),
   get: (id: number) => request.get(`/stays/${id}`),
-  extend: (id: number, extend_to_date: string) =>
-    request.post(`/stays/${id}/extend`, { extend_to_date }),
+  extend: (id: number, data: { days: number; amount?: number; method?: string; remark?: string }) =>
+    request.post(`/stays/${id}/extend`, data),
+  hourly: (data: any) => request.post('/stays/hourly', data),
   transferRoom: (id: number, to_room_id: number, reason?: string) =>
     request.post(`/stays/${id}/transfer-room`, { to_room_id, reason }),
   updateRate: (id: number, rate: number) =>
@@ -60,6 +65,8 @@ export const folioApi = {
 // ---------- 房务 ----------
 export const housekeepingApi = {
   dashboard: () => request.get('/housekeeping/dashboard'),
+  calendar: (from: string, to: string) =>
+    request.get('/housekeeping/calendar', { params: { from, to } }),
   tasks: (params: any) => request.get('/housekeeping/tasks', { params }),
   createTask: (data: any) => request.post('/housekeeping/tasks', data),
   finishTask: (id: number) => request.put(`/housekeeping/tasks/${id}/finish`),

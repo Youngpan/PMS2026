@@ -37,7 +37,7 @@ class RoomStatusPublisherTest {
         handler.afterConnectionEstablished(s1);
         handler.afterConnectionEstablished(s2);
 
-        publisher.publish(101L, "101", "VD");
+        publisher.publish(101L, "101", "OPEN", "DIRTY");
 
         ArgumentCaptor<TextMessage> cap = ArgumentCaptor.forClass(TextMessage.class);
         verify(s1).sendMessage(cap.capture());
@@ -45,7 +45,8 @@ class RoomStatusPublisherTest {
         assertThat(m.get("type")).isEqualTo("room-status");
         assertThat(m.get("roomId")).isEqualTo(101);
         assertThat(m.get("number")).isEqualTo("101");
-        assertThat(m.get("status")).isEqualTo("VD");
+        assertThat(m.get("rentStatus")).isEqualTo("OPEN");
+        assertThat(m.get("cleanStatus")).isEqualTo("DIRTY");
         assertThat(m.get("ts")).isNotNull();
 
         verify(s2).sendMessage(any(TextMessage.class));
@@ -63,7 +64,7 @@ class RoomStatusPublisherTest {
         handler.afterConnectionEstablished(healthy);
 
         // 不应抛异常（broadcast 内部 per-session try/catch）
-        publisher.publish(201L, "201", "VC");
+        publisher.publish(201L, "201", "OPEN", "CLEAN");
 
         verify(broken).sendMessage(any(TextMessage.class));
         verify(healthy).sendMessage(any(TextMessage.class));
@@ -74,7 +75,7 @@ class RoomStatusPublisherTest {
         RoomStatusWebSocketHandler handler = new RoomStatusWebSocketHandler();
         RoomStatusPublisher publisher = new RoomStatusPublisher(handler, objectMapper);
 
-        org.assertj.core.api.Assertions.assertThatCode(() -> publisher.publish(301L, "301", "OOO"))
+        org.assertj.core.api.Assertions.assertThatCode(() -> publisher.publish(301L, "301", "CLOSED", "CLEAN"))
                 .doesNotThrowAnyException();
     }
 
@@ -86,7 +87,7 @@ class RoomStatusPublisherTest {
         WebSocketSession closed = mockSession(false); // isOpen=false
         handler.afterConnectionEstablished(closed);
 
-        publisher.publish(401L, "401", "OCC");
+        publisher.publish(401L, "401", "ASSIGNED", "CLEAN");
 
         verify(closed, never()).sendMessage(any(TextMessage.class));
     }

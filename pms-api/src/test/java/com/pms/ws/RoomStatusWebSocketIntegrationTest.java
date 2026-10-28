@@ -27,7 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * WebSocket 全链路集成测试：真 embedded server + 真 WS 握手 + 业务触发广播。
- * 钉死：/api/v1/ws/room-status 端点可升级、RoomService.changeStatus 触发的广播能送达真实客户端。
+ * 钉死：/api/v1/ws/room-status 端点可升级、RoomService.setCleanStatus/setRentStatus 触发的广播能送达真实客户端。
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
@@ -70,14 +70,14 @@ class RoomStatusWebSocketIntegrationTest {
         assertThat(session.isOpen()).isTrue();
 
         Room r101 = roomMapper.selectOne(new LambdaQueryWrapper<Room>().eq(Room::getNumber, "101"));
-        roomService.changeStatus(r101.getId(), "VD");
+        roomService.setCleanStatus(r101.getId(), "DIRTY");
 
         String payload = client.messages.poll(5, TimeUnit.SECONDS);
         assertThat(payload).isNotNull();
         JsonNode node = objectMapper.readTree(payload);
         assertThat(node.get("type").asText()).isEqualTo("room-status");
         assertThat(node.get("number").asText()).isEqualTo("101");
-        assertThat(node.get("status").asText()).isEqualTo("VD");
+        assertThat(node.get("cleanStatus").asText()).isEqualTo("DIRTY");
         assertThat(node.get("roomId").asLong()).isEqualTo(r101.getId());
     }
 
@@ -89,7 +89,7 @@ class RoomStatusWebSocketIntegrationTest {
         opened.add(connect(c2));
 
         Room r102 = roomMapper.selectOne(new LambdaQueryWrapper<Room>().eq(Room::getNumber, "102"));
-        roomService.changeStatus(r102.getId(), "OOO");
+        roomService.setRentStatus(r102.getId(), "CLOSED");
 
         for (CapturingHandler c : new CapturingHandler[]{c1, c2}) {
             String payload = c.messages.poll(5, TimeUnit.SECONDS);

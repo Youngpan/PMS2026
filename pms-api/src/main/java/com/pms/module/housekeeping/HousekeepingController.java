@@ -4,6 +4,7 @@ import com.pms.common.Result;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -17,6 +18,16 @@ public class HousekeepingController {
     @GetMapping("/dashboard")
     public Result<List<HousekeepingService.FloorBoard>> dashboard() {
         return Result.ok(housekeepingService.dashboard());
+    }
+
+    /** 房态日历：列=房间，首行=日期，格子=订单/在住占用。默认昨天起 20 天。 */
+    @GetMapping("/calendar")
+    public Result<HousekeepingService.CalendarBoard> calendar(
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to) {
+        LocalDate f = from == null ? LocalDate.now().minusDays(1) : LocalDate.parse(from);
+        LocalDate t = to == null ? LocalDate.now().plusDays(20) : LocalDate.parse(to);
+        return Result.ok(housekeepingService.calendar(f, t));
     }
 
     @GetMapping("/tasks")

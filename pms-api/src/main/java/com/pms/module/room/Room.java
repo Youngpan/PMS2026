@@ -17,8 +17,11 @@ public class Room {
     private Long roomTypeId;
     private String number;
     private Integer floor;
-    /** VC净房 VD脏房 OCC在住 OOO维修 BLOCK预留 */
-    private String status;
+    /** 可售状态：OPEN打开/CLOSED关闭/ASSIGNED已排房(在住) */
+    private String rentStatus;
+    /** 卫生状态：CLEAN净房/DIRTY脏房 */
+    private String cleanStatus;
+    private String remark;
     @TableField("deleted_at")
     private LocalDateTime deletedAt;
 }

@@ -109,13 +109,15 @@ CREATE TABLE room (
   room_type_id BIGINT NOT NULL,
   number VARCHAR(16) NOT NULL,
   floor INT,
-  status VARCHAR(16) DEFAULT 'VC',
+  rent_status VARCHAR(8) DEFAULT 'OPEN',
+  clean_status VARCHAR(8) DEFAULT 'CLEAN',
+  remark VARCHAR(255),
   deleted_at TIMESTAMP NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT uk_hotel_number UNIQUE (hotel_id, number)
 );
-CREATE INDEX idx_room_status ON room (hotel_id, status);
+CREATE INDEX idx_room_rent ON room (hotel_id, rent_status);
 CREATE INDEX idx_room_type ON room (room_type_id);
 
 CREATE TABLE room_status_log (
@@ -195,12 +197,16 @@ CREATE TABLE stay (
   hotel_id BIGINT NOT NULL,
   reservation_id BIGINT,
   guest_id BIGINT,
+  guest_name VARCHAR(50),
+  guest_phone VARCHAR(32),
   room_id BIGINT NOT NULL,
   room_type_id BIGINT NOT NULL,
   rate DECIMAL(12,2) NOT NULL,
   check_in_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   check_out_at TIMESTAMP NULL,
   status VARCHAR(16) DEFAULT 'IN',
+  type VARCHAR(8) DEFAULT 'STAY',
+  hours INT,
   operator_id BIGINT
 );
 CREATE INDEX idx_stay_status ON stay (hotel_id, status);
@@ -210,6 +216,7 @@ CREATE TABLE stay_extension (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
   stay_id BIGINT NOT NULL,
   extend_to_date DATE NOT NULL,
+  remark VARCHAR(255),
   operator_id BIGINT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -325,8 +332,8 @@ INSERT INTO channel (name, code, is_ota) VALUES
 INSERT INTO room_type (hotel_id, code, name, max_occupancy, bed_type, area, base_rate, rack_rate) VALUES
 (1, 'STD', '标准间', 2, '双床', 25.00, 280.00, 380.00),
 (1, 'DLB', '大床房', 2, '大床', 28.00, 320.00, 420.00);
-INSERT INTO room (hotel_id, room_type_id, number, floor, status) VALUES
-(1, 1, '101', 1, 'VC'),
-(1, 1, '102', 1, 'VC'),
-(1, 2, '201', 2, 'VC'),
-(1, 2, '202', 2, 'VD');
+INSERT INTO room (hotel_id, room_type_id, number, floor, rent_status, clean_status) VALUES
+(1, 1, '101', 1, 'OPEN', 'CLEAN'),
+(1, 1, '102', 1, 'OPEN', 'CLEAN'),
+(1, 2, '201', 2, 'OPEN', 'CLEAN'),
+(1, 2, '202', 2, 'OPEN', 'DIRTY');

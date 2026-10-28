@@ -16,6 +16,8 @@ public class Stay {
     private Long hotelId;
     private Long reservationId;
     private Long guestId;
+    private String guestName;
+    private String guestPhone;
     private Long roomId;
     private Long roomTypeId;
     private BigDecimal rate;
@@ -23,5 +25,9 @@ public class Stay {
     private LocalDateTime checkOutAt;
     /** IN/OUT */
     private String status;
+    /** STAY 普通入住 / HOURLY 钟点房 */
+    private String type;
+    /** 钟点房时长（小时） */
+    private Integer hours;
     private Long operatorId;
 }

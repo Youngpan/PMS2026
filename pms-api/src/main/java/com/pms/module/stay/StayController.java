@@ -33,8 +33,26 @@ public class StayController {
     }
 
     @PostMapping("/{id}/extend")
-    public Result<StayExtension> extend(@PathVariable Long id, @RequestBody Map<String, String> body) {
-        return Result.ok(stayService.extend(id, LocalDate.parse(body.get("extend_to_date"))));
+    public Result<StayExtension> extend(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+        int days = body.get("days") == null ? 1 : Integer.parseInt(body.get("days").toString());
+        java.math.BigDecimal amount = body.get("amount") == null ? null : new java.math.BigDecimal(body.get("amount").toString());
+        String method = body.get("method") == null ? null : body.get("method").toString();
+        String remark = body.get("remark") == null ? null : body.get("remark").toString();
+        return Result.ok(stayService.extend(id, days, amount, method, remark));
+    }
+
+    @com.pms.common.OpLog(module = "M2", action = "钟点房")
+    @com.pms.common.Idempotent
+    @PostMapping("/hourly")
+    public Result<Stay> hourly(@RequestBody Map<String, Object> body) {
+        Long roomId = ((Number) body.get("room_id")).longValue();
+        String guestName = (String) body.get("guest_name");
+        String guestPhone = (String) body.get("guest_phone");
+        int hours = body.get("hours") == null ? 1 : Integer.parseInt(body.get("hours").toString());
+        java.math.BigDecimal hourlyRate = new java.math.BigDecimal(body.get("hourly_rate").toString());
+        String method = body.get("method") == null ? "CASH" : body.get("method").toString();
+        java.math.BigDecimal amount = body.get("amount") == null ? null : new java.math.BigDecimal(body.get("amount").toString());
+        return Result.ok(stayService.createHourlyStay(roomId, guestName, guestPhone, hours, hourlyRate, method, amount));
     }
 
     @PostMapping("/{id}/transfer-room")

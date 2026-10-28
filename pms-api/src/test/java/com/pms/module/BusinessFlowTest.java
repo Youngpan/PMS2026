@@ -88,10 +88,12 @@ class BusinessFlowTest {
         Long resRoomId = d.rooms.get(0).getId();
         reservationService.confirm(d.reservation.getId());
 
-        // 找一间 VC 净房
+        // 找一间 打开+净房
         Room vacant = roomMapper.selectList(
                 new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Room>()
-                        .eq(Room::getHotelId, 1L).eq(Room::getStatus, "VC")).get(0);
+                        .eq(Room::getHotelId, 1L)
+                        .eq(Room::getRentStatus, "OPEN")
+                        .eq(Room::getCleanStatus, "CLEAN")).get(0);
 
         // 入住：押金 500
         StayService.CheckinReq ci = new StayService.CheckinReq();
@@ -108,9 +110,9 @@ class BusinessFlowTest {
         Stay stay = stays.get(0);
         assertThat(stay.getStatus()).isEqualTo("IN");
 
-        // 房态 → OCC
+        // 房态 → 已排房 ASSIGNED
         Room occupied = roomMapper.selectById(vacant.getId());
-        assertThat(occupied.getStatus()).isEqualTo("OCC");
+        assertThat(occupied.getRentStatus()).isEqualTo("ASSIGNED");
 
         // 预订 → CHECKED_IN
         Reservation afterCi = reservationService.get(d.reservation.getId());
@@ -132,9 +134,10 @@ class BusinessFlowTest {
         assertThat(checkedOut.getStatus()).isEqualTo("OUT");
         assertThat(checkedOut.getCheckOutAt()).isNotNull();
 
-        // 房态 → VD（释放）
+        // 房态 → 释放：可售打开，卫生脏房
         Room released = roomMapper.selectById(vacant.getId());
-        assertThat(released.getStatus()).isEqualTo("VD");
+        assertThat(released.getRentStatus()).isEqualTo("OPEN");
+        assertThat(released.getCleanStatus()).isEqualTo("DIRTY");
 
         // 预订 → CHECKED_OUT
         Reservation afterCo = reservationService.get(d.reservation.getId());
@@ -162,7 +165,9 @@ class BusinessFlowTest {
         reservationService.confirm(d.reservation.getId());
         Room vacant = roomMapper.selectList(
                 new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Room>()
-                        .eq(Room::getHotelId, 1L).eq(Room::getStatus, "VC")).get(0);
+                        .eq(Room::getHotelId, 1L)
+                        .eq(Room::getRentStatus, "OPEN")
+                        .eq(Room::getCleanStatus, "CLEAN")).get(0);
         StayService.CheckinReq ci = new StayService.CheckinReq();
         ci.setReservationId(d.reservation.getId());
         StayService.CheckinItem item = new StayService.CheckinItem();

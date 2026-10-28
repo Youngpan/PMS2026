@@ -72,7 +72,7 @@ public class StayService {
         long operator = currentOperator();
         List<Stay> created = new ArrayList<>();
         for (CheckinItem item : req.getStayItems()) {
-            Room r = roomService.changeStatus(item.getRoomId(), "OCC"); // 含 VC 校验
+            Room r = roomService.occupy(item.getRoomId()); // 含 打开+净房 校验 → 已排房
             // 从预订房型明细取房价/房型
             BigDecimal rate = BigDecimal.ZERO;
             if (item.getReservationRoomId() != null) {
@@ -87,11 +87,14 @@ public class StayService {
             s.setHotelId(hotelId);
             s.setReservationId(res.getId());
             s.setGuestId(res.getGuestId());
+            s.setGuestName(res.getGuestName());
+            s.setGuestPhone(res.getGuestPhone());
             s.setRoomId(r.getId());
             s.setRoomTypeId(r.getRoomTypeId());
             s.setRate(rate);
             s.setCheckInAt(LocalDateTime.now());
             s.setStatus("IN");
+            s.setType("STAY");
             s.setOperatorId(operator);
             stayMapper.insert(s);
 
@@ -121,24 +124,86 @@ public class StayService {
                 .eq(Stay::getStatus, "IN"));
     }
 
+    /**
+     * 续住：days 必填（≥1，前端默认 1）；可选收款金额/方式/备注。
+     * 续住截止日 = max(预订退房日, 已有最新续住截止日, 今天) + days。
+     * 收款走账单 pay（余额清零自动关账）。
+     */
     @Transactional
-    public StayExtension extend(Long stayId, LocalDate extendToDate) {
+    public StayExtension extend(Long stayId, int days, BigDecimal amount, String method, String remark) {
+        if (days < 1) throw new BusinessException(400, "续住天数至少 1");
         Stay s = get(stayId);
         if (!"IN".equals(s.getStatus())) throw new BusinessException(409, "非在住不可续住");
+
+        LocalDate base = LocalDate.now();
+        Reservation res = reservationMapper.selectById(s.getReservationId());
+        if (res != null && res.getCheckOutDate() != null && res.getCheckOutDate().isAfter(base)) {
+            base = res.getCheckOutDate();
+        }
+        StayExtension latest = stayExtensionMapper.selectOne(new LambdaQueryWrapper<StayExtension>()
+                .eq(StayExtension::getStayId, stayId)
+                .orderByDesc(StayExtension::getExtendToDate)
+                .last("LIMIT 1"));
+        if (latest != null && latest.getExtendToDate().isAfter(base)) base = latest.getExtendToDate();
+        LocalDate extendToDate = base.plusDays(days);
+
         StayExtension e = new StayExtension();
         e.setStayId(stayId);
         e.setExtendToDate(extendToDate);
+        e.setRemark(remark);
         e.setOperatorId(currentOperator());
         e.setCreatedAt(LocalDateTime.now());
         stayExtensionMapper.insert(e);
+
+        if (amount != null && amount.compareTo(BigDecimal.ZERO) > 0 && method != null) {
+            Folio folio = folioService.getByStayId(stayId);
+            if (folio != null) folioService.pay(folio.getId(), method, amount);
+        }
         return e;
+    }
+
+    /**
+     * 钟点房（简化）：直接入住无预订，type=HOURLY，按小时单价×hours 记一笔房费。
+     * checkOutAt = now + hours。可选收款。
+     */
+    @Transactional
+    public Stay createHourlyStay(Long roomId, String guestName, String guestPhone,
+                                 int hours, BigDecimal hourlyRate, String method, BigDecimal amount) {
+        if (hours < 1) throw new BusinessException(400, "钟点房时长至少 1 小时");
+        if (hourlyRate == null || hourlyRate.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BusinessException(400, "小时单价必须为正");
+        }
+        Room r = roomService.occupy(roomId); // 打开+净房 → 已排房
+        long operator = currentOperator();
+        Stay s = new Stay();
+        s.setHotelId(hotelId);
+        s.setGuestName(guestName);
+        s.setGuestPhone(guestPhone);
+        s.setRoomId(r.getId());
+        s.setRoomTypeId(r.getRoomTypeId());
+        s.setRate(hourlyRate);
+        s.setCheckInAt(LocalDateTime.now());
+        s.setCheckOutAt(LocalDateTime.now().plusHours(hours));
+        s.setStatus("IN");
+        s.setType("HOURLY");
+        s.setHours(hours);
+        s.setOperatorId(operator);
+        stayMapper.insert(s);
+
+        Folio folio = folioService.ensureFolio(s);
+        BigDecimal charge = hourlyRate.multiply(BigDecimal.valueOf(hours));
+        folioService.addCharge(folio.getId(), "hourly-room", charge, "钟点房 " + hours + " 小时");
+        if (amount != null && amount.compareTo(BigDecimal.ZERO) > 0 && method != null) {
+            folioService.pay(folio.getId(), method, amount);
+        }
+        return s;
     }
 
     @Transactional
     public Stay transferRoom(Long stayId, Long toRoomId, String reason) {
         Stay s = get(stayId);
         if (!"IN".equals(s.getStatus())) throw new BusinessException(409, "非在住不可换房");
-        Room target = roomService.changeStatus(toRoomId, "OCC"); // 目标房必须 VC
+        Room target = roomService.occupy(toRoomId); // 目标房须 打开+净房 → 已排房
         Long fromRoomId = s.getRoomId();
 
         RoomTransfer t = new RoomTransfer();

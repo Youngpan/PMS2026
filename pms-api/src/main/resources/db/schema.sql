@@ -110,7 +110,9 @@ CREATE TABLE room (
   room_type_id BIGINT NOT NULL,
   number VARCHAR(16) NOT NULL,
   floor INT,
-  status VARCHAR(16) DEFAULT 'VC' COMMENT 'VC/VD/OCC/OOO/BLOCK',
+  rent_status VARCHAR(8) DEFAULT 'OPEN' COMMENT 'OPEN打开/CLOSED关闭/ASSIGNED已排房(在住)',
+  clean_status VARCHAR(8) DEFAULT 'CLEAN' COMMENT 'CLEAN净房/DIRTY脏房',
+  remark VARCHAR(255),
   deleted_at TIMESTAMP NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -191,12 +193,16 @@ CREATE TABLE stay (
   hotel_id BIGINT NOT NULL,
   reservation_id BIGINT,
   guest_id BIGINT,
+  guest_name VARCHAR(50),
+  guest_phone VARCHAR(32),
   room_id BIGINT NOT NULL,
   room_type_id BIGINT NOT NULL,
   rate DECIMAL(12,2) NOT NULL,
   check_in_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   check_out_at TIMESTAMP NULL,
   status VARCHAR(16) DEFAULT 'IN' COMMENT 'IN/OUT',
+  type VARCHAR(8) DEFAULT 'STAY' COMMENT 'STAY普通入住/HOURLY钟点房',
+  hours INT COMMENT '钟点房时长(小时)',
   operator_id BIGINT,
   KEY idx_hotel_status (hotel_id, status),
   KEY idx_room (room_id)
@@ -207,6 +213,7 @@ CREATE TABLE stay_extension (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
   stay_id BIGINT NOT NULL,
   extend_to_date DATE NOT NULL,
+  remark VARCHAR(255),
   operator_id BIGINT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -330,8 +337,8 @@ INSERT INTO room_type (hotel_id, code, name, max_occupancy, bed_type, area, base
 (1, 'STD', '标准间', 2, '双床', 25.00, 280.00, 380.00),
 (1, 'DLB', '大床房', 2, '大床', 28.00, 320.00, 420.00);
 
-INSERT INTO room (hotel_id, room_type_id, number, floor, status) VALUES
-(1, 1, '101', 1, 'VC'),
-(1, 1, '102', 1, 'VC'),
-(1, 2, '201', 2, 'VC'),
-(1, 2, '202', 2, 'VD');
+INSERT INTO room (hotel_id, room_type_id, number, floor, rent_status, clean_status) VALUES
+(1, 1, '101', 1, 'OPEN', 'CLEAN'),
+(1, 1, '102', 1, 'OPEN', 'CLEAN'),
+(1, 2, '201', 2, 'OPEN', 'CLEAN'),
+(1, 2, '202', 2, 'OPEN', 'DIRTY');
