@@ -1,0 +1,72 @@
+name: E2E
+
+# 手动触发的端到端浏览器测试：起后端(h2 内存库)+前端 dev，用 GitHub runner 自带 Chrome
+# 跑 e2e-flow.mjs 全链路（预订→确认→入住→退房）。
+#
+# 注：本 workflow 未在真实 GitHub runner 上验证过（本地用便携 Chrome 已跑通）。
+# 首次运行可能需要微调 Chrome 路径 / 后端就绪轮询。故用 workflow_dispatch 手动触发，
+# 不 gate PR。验证通过后可改为 push 触发。
+on:
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    name: 前端 e2e 全链路 (Chrome)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 设置 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: 设置 Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: pms-web/package-lock.json
+
+      - name: 构建后端 jar
+        working-directory: pms-api
+        run: mvn -B -ntp -DskipTests package
+
+      - name: 安装前端依赖
+        working-directory: pms-web
+        run: npm ci
+
+      - name: 跑 e2e 全链路
+        working-directory: pms-web
+        env:
+          PMS_CHROME: /usr/bin/google-chrome
+        run: |
+          set -e
+          # 启动后端：h2 内存库（schema-h2.sql 自动建表+种子 admin/rooms），无需 MySQL 服务
+          java -jar ../pms-api/target/pms-api-1.0.0.jar --spring.profiles.active=h2 > /tmp/api.log 2>&1 &
+          API_PID=$!
+          # 启动前端 dev（vite 代理 /api → localhost:8080，复刻本地联调环境）
+          npm run dev > /tmp/web.log 2>&1 &
+          WEB_PID=$!
+          # 等后端就绪（GET /api/v1/reservations 无 token 返 HTTP 200+body.code 401，curl -sf 判活）
+          for i in $(seq 1 60); do curl -sf http://localhost:8080/api/v1/reservations -o /dev/null && break; sleep 2; done
+          curl -sf http://localhost:8080/api/v1/reservations -o /dev/null || { echo "后端未就绪"; tail -30 /tmp/api.log; exit 1; }
+          # 等前端就绪
+          for i in $(seq 1 60); do curl -sf http://localhost:5173/ -o /dev/null && break; sleep 2; done
+          curl -sf http://localhost:5173/ -o /dev/null || { echo "前端未就绪"; tail -30 /tmp/web.log; exit 1; }
+          # 跑全链路（reset 不需要：h2 内存库每次启动都是干净种子状态）
+          node e2e-flow.mjs
+          E2E_EXIT=$?
+          kill $API_PID $WEB_PID 2>/dev/null || true
+          exit $E2E_EXIT
+
+      - name: 失败时上传日志
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-logs
+          path: |
+            /tmp/api.log
+            /tmp/web.log

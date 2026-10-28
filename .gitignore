@@ -1,0 +1,41 @@
+# ---- Java / Maven ----
+target/
+*.class
+*.jar
+!pms-api/src/test/**/*.jar
+.mvn/wrapper/maven-wrapper.jar
+hs_err_pid*.log
+
+# ---- Node / Vite ----
+node_modules/
+dist/
+*.tsbuildinfo
+.vite/
+
+# ---- IDE ----
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.iml
+*.swp
+
+# ---- 环境与密钥（绝不入库）----
+.env
+.env.local
+*.pem
+*.key
+certs/
+
+# ---- 日志与截图 ----
+*.log
+logs/
+tools/shots/
+tools/*.log
+
+# ---- 便携工具链 + 调试产物（环境特定，体积大，不入库）----
+# tools/ 下是本地解压的 jdk/maven/node/mysql 及运行日志、截图、env.sh，全部不入库；CI 自己装工具
+tools/
+
+# ---- 操作系统杂物 ----
+.DS_Store
+Thumbs.db
