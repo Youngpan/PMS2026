@@ -183,6 +183,50 @@ try {
   log(`   入住后状态: ${status}`)
   if (!status.includes('已入住')) throw new Error(`入住后状态异常: ${status}`)
 
+  log('6b. 房态日历：在住格应显示该宾客')
+  await page.goto(`${BASE}/housekeeping`, { waitUntil: 'networkidle0', timeout: 20000 })
+  await wait(900)
+  await shot('05b-calendar-stay')
+  const stayCell = await page.evaluate((g) => {
+    for (const c of document.querySelectorAll('.cal .cell')) {
+      if (c.innerText.includes(g) && c.classList.contains('cell-stay')) {
+        const tr = c.closest('tr')
+        return { found: true, roomNo: tr?.querySelector('.room-head div')?.innerText || null }
+      }
+    }
+    return { found: false, roomNo: null }
+  }, GUEST)
+  log(`   在住格: ${stayCell.found ? `找到, 房号 ${stayCell.roomNo}` : '未找到'}`)
+  if (!stayCell.found) throw new Error('日历在住格未显示该宾客')
+  const CAL_ROOM = stayCell.roomNo
+
+  log('6c. 点在住格 → 续住弹窗默认天数应为 1')
+  await page.evaluate((g) => {
+    for (const c of document.querySelectorAll('.cal .cell')) {
+      if (c.innerText.includes(g) && c.classList.contains('cell-stay')) { c.click(); break }
+    }
+  }, GUEST)
+  await page.waitForSelector('.el-dialog', { visible: true, timeout: 5000 })
+  await wait(400)
+  await shot('05c-cell-actions')
+  await page.evaluate(() => {
+    const btn = Array.from(document.querySelectorAll('.el-dialog button')).find(b => b.innerText.trim() === '续住')
+    if (btn) btn.click()
+  })
+  await wait(700)
+  const daysVal = await page.evaluate(() => {
+    const inp = document.querySelector('.el-dialog .el-input-number .el-input__inner')
+    return inp ? inp.value : null
+  })
+  log(`   续住默认天数: ${daysVal}`)
+  if (daysVal !== '1') throw new Error(`续住默认天数异常: ${daysVal}`)
+  await shot('05d-extend-default')
+  await page.evaluate(() => {
+    const btn = Array.from(document.querySelectorAll('.el-dialog button')).find(b => b.innerText.trim() === '取消')
+    if (btn) btn.click()
+  })
+  await wait(500)
+
   log('7. 在住看板 → 退房')
   await page.goto(`${BASE}/stays`, { waitUntil: 'networkidle0', timeout: 20000 })
   await wait(500)
@@ -205,6 +249,23 @@ try {
   })
   await wait(1500)
   await shot('06-checked-out')
+
+  log('7b. 退房后日历格应转脏房')
+  await page.goto(`${BASE}/housekeeping`, { waitUntil: 'networkidle0', timeout: 20000 })
+  await wait(900)
+  await shot('06b-calendar-dirty')
+  const dirty = await page.evaluate((no) => {
+    const todayIdx = Array.from(document.querySelectorAll('.cal thead .date-head')).findIndex(th => th.classList.contains('today'))
+    for (const tr of document.querySelectorAll('.cal tbody tr')) {
+      if (tr.querySelector('.room-head div')?.innerText === no) {
+        const cell = tr.querySelectorAll('.cell')[todayIdx]
+        return cell ? cell.classList.contains('cell-dirty') : false
+      }
+    }
+    return false
+  }, CAL_ROOM)
+  log(`   房号 ${CAL_ROOM} 今日格脏房: ${dirty}`)
+  if (!dirty) throw new Error(`退房后日历格未转脏房 (房号 ${CAL_ROOM})`)
 
   log('8. 回到预订页验证最终状态')
   await page.goto(`${BASE}/reservations`, { waitUntil: 'networkidle0', timeout: 20000 })

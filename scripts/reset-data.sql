@@ -28,6 +28,6 @@ TRUNCATE TABLE guest;
 
 SET FOREIGN_KEY_CHECKS = 1;
 
--- 房态重置为种子状态：101/102/201 = VC（净房），202 = VD（脏房）
-UPDATE room SET status = 'VC', updated_at = CURRENT_TIMESTAMP WHERE number IN ('101','102','201');
-UPDATE room SET status = 'VD', updated_at = CURRENT_TIMESTAMP WHERE number = '202';
+-- 房态重置为种子状态：101/102/201 = 打开+净房，202 = 打开+脏房
+UPDATE room SET rent_status = 'OPEN', clean_status = 'CLEAN', remark = NULL, updated_at = CURRENT_TIMESTAMP WHERE number IN ('101','102','201');
+UPDATE room SET rent_status = 'OPEN', clean_status = 'DIRTY', remark = NULL, updated_at = CURRENT_TIMESTAMP WHERE number = '202';
