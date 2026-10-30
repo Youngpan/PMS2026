@@ -2,6 +2,8 @@ package com.pms.module.housekeeping;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.pms.common.BusinessException;
+import com.pms.module.channel.Channel;
+import com.pms.module.channel.ChannelMapper;
 import com.pms.module.reservation.Reservation;
 import com.pms.module.reservation.ReservationMapper;
 import com.pms.module.reservation.ReservationRoom;
@@ -39,6 +41,7 @@ public class HousekeepingService {
     private final StayMapper stayMapper;
     private final ReservationMapper reservationMapper;
     private final ReservationRoomMapper reservationRoomMapper;
+    private final ChannelMapper channelMapper;
     private final RoomStatusPublisher publisher;
 
     @Value("${pms.hotel.id}")
@@ -72,10 +75,15 @@ public class HousekeepingService {
         List<String> dates = new ArrayList<>();
         for (LocalDate d = from; !d.isAfter(to); d = d.plusDays(1)) dates.add(d.toString());
 
-        // 在住 stay（status=IN，且时间窗与 [from,to] 重叠）
+        // 渠道映射：id → Channel（cell 渠道展示用）
+        Map<Long, Channel> channelById = channelMapper.selectList(new LambdaQueryWrapper<Channel>()
+                .orderByAsc(Channel::getId)).stream()
+                .collect(Collectors.toMap(Channel::getId, c -> c, (a, b) -> a));
+
+        // 在住/已退房 stay（status=IN/OUT，且时间窗与 [from,to] 重叠）
         List<Stay> stays = stayMapper.selectList(new LambdaQueryWrapper<Stay>()
                 .eq(Stay::getHotelId, hotelId)
-                .eq(Stay::getStatus, "IN")
+                .in(Stay::getStatus, List.of("IN", "OUT"))
                 .le(Stay::getCheckInAt, to.atTime(23, 59, 59))
                 .and(w -> w.isNull(Stay::getCheckOutAt).or().ge(Stay::getCheckOutAt, from.atStartOfDay())));
         Map<Long, Stay> stayByRoom = stays.stream()
@@ -86,28 +94,46 @@ public class HousekeepingService {
                 .isNotNull(ReservationRoom::getAssignedRoomId));
         Map<Long, ReservationRoom> rrByRoom = rrs.stream()
                 .collect(Collectors.toMap(ReservationRoom::getAssignedRoomId, r -> r, (a, b) -> a));
+
+        // 合并加载 reservation：stay.reservationId（非空）+ reservation_room 引用
+        List<Long> resIds = new ArrayList<>(rrs.stream().map(ReservationRoom::getReservationId).distinct().toList());
+        for (Stay s : stays) {
+            if (s.getReservationId() != null && !resIds.contains(s.getReservationId())) resIds.add(s.getReservationId());
+        }
         Map<Long, Reservation> resById = Map.of();
-        if (!rrs.isEmpty()) {
-            List<Long> resIds = rrs.stream().map(ReservationRoom::getReservationId).distinct().collect(Collectors.toList());
+        if (!resIds.isEmpty()) {
             List<Reservation> reservations = reservationMapper.selectList(new LambdaQueryWrapper<Reservation>()
                     .in(Reservation::getId, resIds)
-                    .in(Reservation::getStatus, List.of("CONFIRMED", "CHECKED_IN"))
+                    .in(Reservation::getStatus, List.of("CONFIRMED", "CHECKED_IN", "CHECKED_OUT"))
                     .le(Reservation::getCheckInDate, to)
                     .gt(Reservation::getCheckOutDate, from));
             resById = reservations.stream().collect(Collectors.toMap(Reservation::getId, r -> r, (a, b) -> a));
         }
+
+        // 线下散客(WALKIN) 渠道：钟点房等无 reservation 的 stay 默认归属
+        Channel walkin = channelById.values().stream()
+                .filter(c -> "WALKIN".equals(c.getCode())).findFirst().orElse(null);
 
         Map<String, Cell> cells = new LinkedHashMap<>();
         for (Room r : rooms) {
             Stay st = stayByRoom.get(r.getId());
             ReservationRoom rr = rrByRoom.get(r.getId());
             Reservation res = rr == null ? null : resById.get(rr.getReservationId());
+            // stay 渠道：有 reservation 取 res.channelId，否则 WALKIN
+            Channel stayChannel = null;
+            if (st != null) {
+                Long cid = st.getReservationId() != null && resById.containsKey(st.getReservationId())
+                        ? resById.get(st.getReservationId()).getChannelId()
+                        : (walkin == null ? null : walkin.getId());
+                stayChannel = cid == null ? null : channelById.get(cid);
+            }
+            Channel resChannel = res == null || res.getChannelId() == null ? null : channelById.get(res.getChannelId());
             for (String d : dates) {
                 LocalDate date = LocalDate.parse(d);
                 if (st != null && coversStay(st, date)) {
-                    cells.put(r.getId() + ":" + d, cellOfStay(st, r.getId(), d));
+                    cells.put(r.getId() + ":" + d, cellOfStay(st, r.getId(), d, stayChannel));
                 } else if (res != null && coversReservation(res, date)) {
-                    cells.put(r.getId() + ":" + d, cellOfReservation(res, r.getId(), d));
+                    cells.put(r.getId() + ":" + d, cellOfReservation(res, r.getId(), d, resChannel));
                 }
             }
         }
@@ -120,16 +146,19 @@ public class HousekeepingService {
     }
 
     /**
-     * stay 覆盖某日：checkInDate ≤ date ≤ checkOutDate（含退房当日，因退房当天客人仍在至退房时刻；
-     * 钟点房 checkOut 同日也覆盖）。未退房则 checkOutDate 视为 +∞。
+     * stay 覆盖某日：
+     * - IN（在住）：checkInDate ≤ date ≤ checkOutDate（含退房当日，钟点房 checkOut 同日也覆盖）。
+     * - OUT（已退房）：checkInDate ≤ date ＜ checkOutDate（不含退房当日——退房当天房间转脏房，
+     *   格子不再显示该宾客，由空格的脏房样式呈现）。
+     * 未退房则 checkOutDate 视为 +∞。
      */
     private boolean coversStay(Stay s, LocalDate date) {
         LocalDate ci = s.getCheckInAt() == null ? null : s.getCheckInAt().toLocalDate();
         if (ci == null || date.isBefore(ci)) return false;
-        if (s.getCheckOutAt() != null) {
-            return !date.isAfter(s.getCheckOutAt().toLocalDate());
-        }
-        return true;
+        if (s.getCheckOutAt() == null) return true;
+        LocalDate co = s.getCheckOutAt().toLocalDate();
+        if ("OUT".equals(s.getStatus())) return date.isBefore(co);
+        return !date.isAfter(co);
     }
 
     /** reservation 覆盖某日：checkInDate ≤ date ＜ checkOutDate。 */
@@ -138,7 +167,7 @@ public class HousekeepingService {
         return date.isBefore(res.getCheckOutDate());
     }
 
-    private Cell cellOfStay(Stay s, Long roomId, String date) {
+    private Cell cellOfStay(Stay s, Long roomId, String date, Channel channel) {
         Cell c = new Cell();
         c.setType("stay");
         c.setId(s.getId());
@@ -149,10 +178,11 @@ public class HousekeepingService {
         c.setCheckIn(s.getCheckInAt() == null ? null : s.getCheckInAt().toLocalDate().toString());
         c.setCheckOut(s.getCheckOutAt() == null ? null : s.getCheckOutAt().toLocalDate().toString());
         c.setHourly("HOURLY".equals(s.getType()));
+        applyChannel(c, channel);
         return c;
     }
 
-    private Cell cellOfReservation(Reservation res, Long roomId, String date) {
+    private Cell cellOfReservation(Reservation res, Long roomId, String date, Channel channel) {
         Cell c = new Cell();
         c.setType("reservation");
         c.setId(res.getId());
@@ -163,7 +193,16 @@ public class HousekeepingService {
         c.setCheckIn(res.getCheckInDate().toString());
         c.setCheckOut(res.getCheckOutDate().toString());
         c.setHourly(false);
+        applyChannel(c, channel);
         return c;
+    }
+
+    private void applyChannel(Cell c, Channel channel) {
+        if (channel != null) {
+            c.setChannelId(channel.getId());
+            c.setChannelName(channel.getName());
+            c.setChannelIcon(channel.getIcon());
+        }
     }
 
     public List<HousekeepingTask> tasks(String status, Long assigneeId) {
@@ -282,5 +321,10 @@ public class HousekeepingService {
         private String checkIn;
         private String checkOut;
         private boolean hourly;
+        /** 订单渠道来源 */
+        private Long channelId;
+        private String channelName;
+        /** 渠道图标标识（预留，后续填充） */
+        private String channelIcon;
     }
 }

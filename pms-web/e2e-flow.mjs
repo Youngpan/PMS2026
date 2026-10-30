@@ -183,29 +183,35 @@ try {
   log(`   入住后状态: ${status}`)
   if (!status.includes('已入住')) throw new Error(`入住后状态异常: ${status}`)
 
-  log('6b. 房态日历：在住格应显示该宾客')
+  log('6b. 房态日历：在住格应显示宾客姓名前两字 + 渠道')
   await page.goto(`${BASE}/housekeeping`, { waitUntil: 'networkidle0', timeout: 20000 })
   await wait(900)
   await shot('05b-calendar-stay')
-  const stayCell = await page.evaluate((g) => {
+  // 格子现显示 guestName.slice(0,2)，故按前两字匹配
+  const name2 = GUEST.slice(0, 2)
+  const stayCell = await page.evaluate((n2) => {
     for (const c of document.querySelectorAll('.cal .cell')) {
-      if (c.innerText.includes(g) && c.classList.contains('cell-stay')) {
-        const tr = c.closest('tr')
-        return { found: true, roomNo: tr?.querySelector('.room-head div')?.innerText || null }
+      if (c.classList.contains('cell-stay')) {
+        const guest = c.querySelector('.guest')?.innerText || ''
+        const ch = c.querySelector('.ch')?.innerText || ''
+        if (guest === n2 && ch.length > 0) {
+          const tr = c.closest('tr')
+          return { found: true, roomNo: tr?.querySelector('.room-head div')?.innerText || null, channel: ch }
+        }
       }
     }
-    return { found: false, roomNo: null }
-  }, GUEST)
-  log(`   在住格: ${stayCell.found ? `找到, 房号 ${stayCell.roomNo}` : '未找到'}`)
-  if (!stayCell.found) throw new Error('日历在住格未显示该宾客')
+    return { found: false, roomNo: null, channel: null }
+  }, name2)
+  log(`   在住格: ${stayCell.found ? `找到, 房号 ${stayCell.roomNo}, 渠道 "${stayCell.channel}"` : '未找到'}`)
+  if (!stayCell.found) throw new Error('日历在住格未显示宾客姓名前两字+渠道')
   const CAL_ROOM = stayCell.roomNo
 
   log('6c. 点在住格 → 续住弹窗默认天数应为 1')
-  await page.evaluate((g) => {
+  await page.evaluate((n2) => {
     for (const c of document.querySelectorAll('.cal .cell')) {
-      if (c.innerText.includes(g) && c.classList.contains('cell-stay')) { c.click(); break }
+      if (c.classList.contains('cell-stay') && (c.querySelector('.guest')?.innerText || '') === n2) { c.click(); break }
     }
-  }, GUEST)
+  }, name2)
   await page.waitForSelector('.el-dialog', { visible: true, timeout: 5000 })
   await wait(400)
   await shot('05c-cell-actions')

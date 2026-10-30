@@ -32,10 +32,14 @@
             </td>
             <td v-for="d in board.dates" :key="r.id + ':' + d"
                 class="cell" :class="cellClass(r, d)"
-                @click="openCell(r, d)">
+                @click="onCellClick(r, d)"
+                @mouseenter="onCellHover(r, d)">
               <template v-if="cellOf(r, d)">
-                <div class="guest">{{ cellOf(r, d).guestName || '—' }}</div>
-                <div class="tag">{{ cellTag(cellOf(r, d)) }}</div>
+                <div class="guest">{{ name2(cellOf(r, d).guestName) }}</div>
+                <div class="ch"><i class="ch-icon" />{{ cellOf(r, d).channelName || '—' }}</div>
+              </template>
+              <template v-else>
+                <button class="more-btn" title="更多操作" @click.stop="openCell(r, d)">⋯</button>
               </template>
             </td>
           </tr>
@@ -56,24 +60,46 @@
       <div v-if="selected" style="display:flex; flex-direction:column; gap:10px">
         <!-- 空房操作 -->
         <template v-if="!selected.cell">
-          <el-button type="primary" @click="onCreateOrder">录入订单</el-button>
-          <el-button type="success" @click="openHourly">钟点房</el-button>
-          <el-button @click="onRemark">备注{{ selected.room.remark ? '（已有）' : '' }}</el-button>
-          <el-button :type="selected.room.rentStatus === 'CLOSED' ? 'warning' : 'danger'"
-                     @click="onToggleRent">
-            {{ selected.room.rentStatus === 'CLOSED' ? '打开房间' : '关闭房间' }}
-          </el-button>
+          <!-- 关闭房：仅允许打开 -->
+          <template v-if="selected.room.rentStatus === 'CLOSED'">
+            <el-button type="warning" @click="onToggleRent">打开房间</el-button>
+          </template>
+          <!-- 打开房：录单走左键范围选房，⋯ 提供其余操作 -->
+          <template v-else>
+            <el-button type="success" @click="openHourly">钟点房</el-button>
+            <el-button @click="onRemark">备注{{ selected.room.remark ? '（已有）' : '' }}</el-button>
+            <el-button type="danger" @click="onToggleRent">关闭房间</el-button>
+            <div class="status-row">
+              <span class="status-label">卫生状态</span>
+              <el-button-group>
+                <el-button size="small" :type="selected.room.cleanStatus === 'CLEAN' ? 'success' : ''"
+                           @click="onSetClean('CLEAN')">净房</el-button>
+                <el-button size="small" :type="selected.room.cleanStatus === 'DIRTY' ? 'warning' : ''"
+                           @click="onSetClean('DIRTY')">脏房</el-button>
+              </el-button-group>
+            </div>
+          </template>
         </template>
         <!-- 已排房(预订)操作 -->
         <template v-else-if="selected.cell.type === 'reservation'">
-          <el-button type="warning" @click="onCheckin">办理入住（待入住→已入住）</el-button>
-          <div style="color:#999; font-size:12px">预订号 #{{ selected.cell.id }} · {{ selected.cell.status }}</div>
+          <el-button type="warning" @click="onCheckin">改为已入住（办理入住）</el-button>
+          <div style="color:#999; font-size:12px">预订号 #{{ selected.cell.id }} · {{ selected.cell.status }}（待入住）</div>
         </template>
         <!-- 在住操作 -->
         <template v-else-if="selected.cell.type === 'stay'">
           <el-button type="primary" @click="openExtend">续住</el-button>
           <el-button type="warning" @click="onTransfer">换房</el-button>
           <el-button type="danger" @click="onCheckout">退房</el-button>
+          <el-button type="info" @click="onUndoCheckin">改为待入住（撤销入住）</el-button>
+          <div class="status-row">
+            <span class="status-label">卫生状态</span>
+            <el-button-group>
+              <el-button size="small" :type="selected.room.cleanStatus === 'CLEAN' ? 'success' : ''"
+                         @click="onSetClean('CLEAN')">净房</el-button>
+              <el-button size="small" :type="selected.room.cleanStatus === 'DIRTY' ? 'warning' : ''"
+                         @click="onSetClean('DIRTY')">脏房</el-button>
+            </el-button-group>
+          </div>
           <div style="color:#999; font-size:12px">在住 #{{ selected.cell.id }}{{ selected.cell.hourly ? ' · 钟点房' : '' }}</div>
         </template>
       </div>
@@ -81,6 +107,22 @@
 
     <!-- 录入订单 -->
     <ReservationCreateDialog v-model="createVisible" :prefill="createPrefill" @success="onOrderCreated" />
+
+    <!-- 范围选房后操作选择器 -->
+    <el-dialog v-model="rangeActionVisible"
+               :title="rangeSelected ? `房号 ${rangeSelected.room.number} · ${rangeSelected.start} → ${rangeSelected.end}` : ''"
+               width="360px">
+      <div v-if="rangeSelected" style="display:flex; flex-direction:column; gap:10px">
+        <div v-if="rangeNights() < 1" class="range-tip">
+          已选择同日（{{ rangeSelected.start }}）。录入订单需至少 1 晚，可改为备注或关闭房间。
+        </div>
+        <el-button type="primary" :disabled="rangeNights() < 1" @click="rangeCreateOrder">
+          录入订单（{{ rangeNights() }} 晚）
+        </el-button>
+        <el-button @click="rangeRemark">备注{{ rangeSelected.room.remark ? '（已有）' : '' }}</el-button>
+        <el-button type="danger" @click="rangeCloseRoom">关闭房间</el-button>
+      </div>
+    </el-dialog>
 
     <!-- 钟点房 -->
     <el-dialog v-model="hourlyVisible" title="钟点房" width="420px">
@@ -148,6 +190,10 @@ const saving = ref(false)
 const createVisible = ref(false)
 const createPrefill = ref<any>({})
 
+// 范围选房后的操作选择器
+const rangeSelected = ref<{ room: any; start: string; end: string } | null>(null)
+const rangeActionVisible = ref(false)
+
 // 钟点房
 const hourlyVisible = ref(false)
 const hourlyForm = reactive({ roomId: 0, roomNumber: '', guestName: '', guestPhone: '', hours: 3, hourlyRate: 50, method: 'CASH', amount: 0 })
@@ -185,33 +231,102 @@ function resetRange() { from.value = addDays(todayStr, -1); to.value = addDays(t
 
 function cellKey(roomId: number, date: string) { return roomId + ':' + date }
 function cellOf(r: any, d: string) { return board.cells[cellKey(r.id, d)] }
+/** 预订姓名取前两个汉字 */
+function name2(s: string) { return (s || '—').slice(0, 2) }
+
+// ---- 日期范围多选（左键点入住日 → 右移 → 再点离店日 → 自动开录入订单弹窗）----
+const rangeStart = ref<{ roomId: number; date: string } | null>(null)
+const rangeHover = ref<{ roomId: number; date: string } | null>(null)
+
+function inRange(r: any, d: string) {
+  if (!rangeStart.value || rangeStart.value.roomId !== r.id) return false
+  if (!rangeHover.value || rangeHover.value.roomId !== r.id) return d === rangeStart.value.date
+  const a = rangeStart.value.date, b = rangeHover.value.date
+  const lo = a < b ? a : b, hi = a < b ? b : a
+  return d >= lo && d <= hi
+}
 function cellClass(r: any, d: string) {
   const c = cellOf(r, d)
   if (c) return c.type === 'stay' ? 'cell-stay' : 'cell-res'
   if (r.rentStatus === 'CLOSED') return 'cell-closed'
+  if (inRange(r, d)) return 'cell-clean cell-range'
   return r.cleanStatus === 'DIRTY' ? 'cell-dirty' : 'cell-clean'
 }
-function cellTag(c: any) {
-  if (c.type === 'stay') return c.hourly ? '钟点' : '在住'
-  return c.status === 'CONFIRMED' ? '已确认' : c.status
+
+function onCellClick(r: any, d: string) {
+  const c = cellOf(r, d)
+  if (c) { openCell(r, d); return }            // occupied → 操作弹窗
+  if (r.rentStatus === 'CLOSED') return        // 关闭房：左键无效（⋯ 处理）
+  // 空房·OPEN → 范围选房
+  if (!rangeStart.value) {
+    rangeStart.value = { roomId: r.id, date: d }
+    rangeHover.value = { roomId: r.id, date: d }
+    return
+  }
+  if (rangeStart.value.roomId === r.id && d >= rangeStart.value.date) {
+    // 同房当天或更右 → 选定离店日，弹出操作选择器（录入订单/关闭/备注）
+    openRangeAction(rangeStart.value.date, d, r)
+    rangeStart.value = null
+    rangeHover.value = null
+  } else {
+    // 跨房或更左 → 重置起点
+    rangeStart.value = { roomId: r.id, date: d }
+    rangeHover.value = { roomId: r.id, date: d }
+  }
 }
+function onCellHover(r: any, d: string) {
+  if (!rangeStart.value) return
+  if (r.rentStatus === 'CLOSED' || cellOf(r, d)) return
+  if (r.id === rangeStart.value.roomId) rangeHover.value = { roomId: r.id, date: d }
+}
+function openRangeAction(start: string, end: string, r: any) {
+  rangeSelected.value = { room: r, start, end }
+  rangeActionVisible.value = true
+}
+function rangeNights() {
+  const rs = rangeSelected.value
+  if (!rs) return 0
+  const a = new Date(rs.start), b = new Date(rs.end)
+  return Math.round((b.getTime() - a.getTime()) / 86400000)
+}
+function rangeCreateOrder() {
+  const rs = rangeSelected.value!
+  rangeActionVisible.value = false
+  createPrefill.value = {
+    checkInDate: rs.start,
+    checkOutDate: rs.end,   // 第二次点击即离店日
+    roomTypeId: rs.room.roomTypeId,
+    assignedRoomId: rs.room.id,
+    roomNumber: rs.room.number,
+  }
+  createVisible.value = true
+}
+async function rangeCloseRoom() {
+  const r = rangeSelected.value!.room
+  rangeActionVisible.value = false
+  await roomApi.setRentStatus(r.id, 'CLOSED')
+  ElMessage.success('已关闭')
+  load()
+}
+function rangeRemark() {
+  const r = rangeSelected.value!.room
+  rangeActionVisible.value = false
+  ElMessageBox.prompt('房间备注', '备注', { inputValue: r.remark || '' })
+    .then(async ({ value }) => {
+      await roomApi.setRemark(r.id, value)
+      ElMessage.success('备注已保存')
+      load()
+    }).catch(() => {})
+}
+function cancelRange() { rangeStart.value = null; rangeHover.value = null }
 
 function openCell(r: any, d: string) {
+  cancelRange()
   selected.value = { room: r, date: d, cell: cellOf(r, d) }
   actionVisible.value = true
 }
 
 // ---- 空房操作 ----
-function onCreateOrder() {
-  actionVisible.value = false
-  createPrefill.value = {
-    checkInDate: selected.value!.date,
-    roomTypeId: selected.value!.room.roomTypeId,
-    assignedRoomId: selected.value!.room.id,
-    roomNumber: selected.value!.room.number,
-  }
-  createVisible.value = true
-}
 function onOrderCreated() { load() }
 
 function openHourly() {
@@ -263,6 +378,16 @@ async function onToggleRent() {
   actionVisible.value = false
   await roomApi.setRentStatus(r.id, target)
   ElMessage.success(target === 'CLOSED' ? '已关闭' : '已打开')
+  load()
+}
+
+/** 卫生状态切换：净房 / 脏房（空房与在住房均可改）。 */
+async function onSetClean(status: string) {
+  const r = selected.value!.room
+  if (r.cleanStatus === status) { actionVisible.value = false; return }
+  actionVisible.value = false
+  await roomApi.setCleanStatus(r.id, status)
+  ElMessage.success(status === 'CLEAN' ? '已标记净房' : '已标记脏房')
   load()
 }
 
@@ -332,6 +457,21 @@ function onCheckout() {
     }).catch(() => {})
 }
 
+/** 撤销入住（已入住 → 待入住）：回滚在住+账单，房态恢复净房，预订回 CONFIRMED。 */
+function onUndoCheckin() {
+  const cell = selected.value!.cell
+  actionVisible.value = false
+  ElMessageBox.confirm(
+    '撤销入住将删除该在住及全部账单（含押金收款），房态恢复净房，预订回退为待入住。\n已有续住/换房的在住不可撤销，请改用退房。',
+    '撤销入住确认',
+    { type: 'warning', confirmButtonText: '确认撤销', cancelButtonText: '取消' },
+  ).then(async () => {
+    await stayApi.undoCheckin(cell.id)
+    ElMessage.success('已撤销入住，房间回到待入住（净房）')
+    load()
+  }).catch(() => {})
+}
+
 // ---- WS 实时刷新 ----
 let ws: WebSocket | null = null
 let reconnectTimer: any = null
@@ -344,10 +484,13 @@ function connectWs() {
   ws.onclose = () => { reconnectTimer = setTimeout(connectWs, 3000) }
 }
 
-onMounted(() => { load(); connectWs() })
+function onKeydown(e: KeyboardEvent) { if (e.key === 'Escape') cancelRange() }
+
+onMounted(() => { load(); connectWs(); window.addEventListener('keydown', onKeydown) })
 onUnmounted(() => {
   if (reconnectTimer) clearTimeout(reconnectTimer)
   if (ws) ws.close()
+  window.removeEventListener('keydown', onKeydown)
 })
 </script>
 
@@ -362,15 +505,34 @@ onUnmounted(() => {
 .cal .wd { font-weight: 600; }
 .cal .md { color: #888; font-size: 11px; }
 .cal .room-head { position: sticky; left: 0; z-index: 1; background: #fff; min-width: 110px; }
-.cal .cell { height: 46px; vertical-align: top; cursor: pointer; }
+.cal .cell { height: 46px; vertical-align: top; cursor: pointer; position: relative; }
 .cal .cell:hover { outline: 2px solid #409eff; outline-offset: -2px; }
 .cal .cell-stay { background: #d9ecff; }
 .cal .cell-res { background: #d1edc4; }
 .cal .cell-clean { background: #f0f9eb; }
 .cal .cell-dirty { background: #fdf6ec; }
-.cal .cell-closed { background: #f4f4f5; color: #bbb; }
+.cal .cell-closed { background: #909399; color: #c0c4cc; cursor: default; }
+.cal .cell-closed:hover { outline: none; }
+/* 关闭房斜杠：对角线 */
+.cal .cell-closed::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(to top right, transparent calc(50% - 1px), #c0c4cc 50%, transparent calc(50% + 1px));
+}
+/* 范围选房高亮 */
+.cal .cell-range { background: #ecf5ff !important; box-shadow: inset 0 0 0 2px #409eff; }
 .cal .guest { font-weight: 600; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cal .tag { font-size: 10px; color: #666; }
+.cal .ch { font-size: 10px; color: #555; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 2px; }
+.status-row { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.status-label { font-size: 12px; color: #888; white-space: nowrap; }
+.range-tip { font-size: 12px; color: #e6a23c; background: #fdf6ec; border: 1px solid #faecd8; border-radius: 4px; padding: 6px 8px; }
+.cal .ch-icon { display: inline-block; width: 10px; height: 10px; flex: 0 0 10px; border-radius: 2px; background: #c0c4cc; opacity: .5; }
+/* 空格右上角 ⋯ 按钮 */
+.cal .more-btn {
+  position: absolute; top: 0; right: 2px; border: none; background: transparent;
+  color: #909399; font-size: 12px; line-height: 1; cursor: pointer; padding: 0 2px; opacity: .35;
+}
+.cal .cell:hover .more-btn { opacity: 1; }
+.cal .cell-closed .more-btn { color: #fff; opacity: .7; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-left: 4px; vertical-align: middle; }
 .dot.c-clean { background: #67c23a; }
 .dot.c-dirty { background: #e6a23c; }
@@ -381,5 +543,6 @@ onUnmounted(() => {
 .lg.cell-res { background: #d1edc4; }
 .lg.cell-clean { background: #f0f9eb; }
 .lg.cell-dirty { background: #fdf6ec; }
-.lg.cell-closed { background: #f4f4f5; }
+.lg.cell-closed { background: #909399; position: relative; }
+.lg.cell-closed::after { content:''; position:absolute; inset:0; background: linear-gradient(to top right, transparent calc(50% - 1px), #c0c4cc 50%, transparent calc(50% + 1px)); }
 </style>

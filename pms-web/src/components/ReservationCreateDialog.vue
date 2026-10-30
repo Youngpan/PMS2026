@@ -13,6 +13,11 @@
           <el-option v-for="t in roomTypes" :key="t.id" :label="t.name" :value="t.id" />
         </el-select>
       </el-form-item>
+      <el-form-item label="渠道">
+        <el-select v-model="form.channelId" placeholder="选择渠道">
+          <el-option v-for="c in channels" :key="c.id" :label="c.name" :value="c.id" />
+        </el-select>
+      </el-form-item>
       <el-form-item label="房价"><el-input-number v-model="form.rate" :min="0" :precision="2" /></el-form-item>
       <el-form-item label="备注"><el-input v-model="form.remark" /></el-form-item>
     </el-form>
@@ -26,20 +31,21 @@
 <script setup lang="ts">
 import { ref, reactive, watch, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { reservationApi, roomApi } from '@/api/modules'
+import { reservationApi, roomApi, channelApi } from '@/api/modules'
 
 const props = defineProps<{
   modelValue: boolean
-  /** 预填：从房态日历空格发起时，预填房号/房型/入住日期 */
-  prefill?: { checkInDate?: string; roomTypeId?: number; assignedRoomId?: number; roomNumber?: string }
+  /** 预填：从房态日历空格/范围选房发起时，预填房号/房型/入住离店日期 */
+  prefill?: { checkInDate?: string; checkOutDate?: string; roomTypeId?: number; assignedRoomId?: number; roomNumber?: string }
 }>()
 const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void; (e: 'success'): void }>()
 
 const roomTypes = ref<any[]>([])
+const channels = ref<any[]>([])
 const saving = ref(false)
 const form = reactive<any>({
   guestName: '', guestPhone: '', checkInDate: '', checkOutDate: '',
-  roomTypeId: null, rate: 0, remark: '',
+  roomTypeId: null, channelId: null as number | null, rate: 0, remark: '',
   assignedRoomId: null as number | null, roomNumber: '' as string,
 })
 
@@ -48,13 +54,20 @@ function reset() {
   Object.assign(form, {
     guestName: '', guestPhone: '',
     checkInDate: p.checkInDate || today(),
-    checkOutDate: p.checkInDate ? addDays(p.checkInDate, 1) : '',
+    checkOutDate: p.checkOutDate || (p.checkInDate ? addDays(p.checkInDate, 1) : ''),
     roomTypeId: p.roomTypeId ?? null,
+    channelId: walkinChannelId(),
     rate: 0, remark: '',
     assignedRoomId: p.assignedRoomId ?? null,
     roomNumber: p.roomNumber || '',
   })
   if (form.roomTypeId) onTypeChange()
+}
+
+/** 线下散客(WALKIN) 渠道 id，作为默认渠道 */
+function walkinChannelId() {
+  const w = channels.value.find((c: any) => c.code === 'WALKIN')
+  return w ? w.id : (channels.value[0]?.id ?? 1)
 }
 
 function today() { return new Date().toISOString().slice(0, 10) }
@@ -79,7 +92,7 @@ async function save() {
       guestPhone: form.guestPhone,
       checkInDate: form.checkInDate,
       checkOutDate: form.checkOutDate,
-      channelId: 1,
+      channelId: form.channelId,
       remark: form.remark,
       rooms: [{ roomTypeId: form.roomTypeId, roomCount: 1, rate: form.rate, assignedRoomId: form.assignedRoomId || undefined }],
     })
@@ -91,5 +104,8 @@ async function save() {
   }
 }
 
-onMounted(async () => { roomTypes.value = await roomApi.types() })
+onMounted(async () => {
+  roomTypes.value = await roomApi.types()
+  channels.value = await channelApi.list()
+})
 </script>

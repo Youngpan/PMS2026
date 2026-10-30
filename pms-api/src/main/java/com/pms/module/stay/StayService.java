@@ -280,6 +280,50 @@ public class StayService {
         return s;
     }
 
+    /**
+     * 撤销入住（已入住 → 待入住）：回滚一次 checkin —— 删在住 + 账单/明细/收款，
+     * 房态恢复 打开+净房，预订 CHECKED_IN → CONFIRMED。
+     * 仅限预订入住(STAY)、无续住/换房记录的干净在住可撤销；否则提示改用退房。
+     */
+    @Transactional
+    public Stay undoCheckin(Long stayId) {
+        Stay s = get(stayId);
+        if (!"IN".equals(s.getStatus())) {
+            throw BusinessException.of(409, "非在住不可撤销入住");
+        }
+        if (!"STAY".equals(s.getType())) {
+            throw BusinessException.of(409, "仅预订入住可撤销，钟点房请走退房");
+        }
+        Long extCnt = stayExtensionMapper.selectCount(new LambdaQueryWrapper<StayExtension>()
+                .eq(StayExtension::getStayId, stayId));
+        if (extCnt != null && extCnt > 0) {
+            throw BusinessException.of(409, "已有续住记录，不可撤销入住，请改用退房");
+        }
+        Long trCnt = roomTransferMapper.selectCount(new LambdaQueryWrapper<RoomTransfer>()
+                .eq(RoomTransfer::getStayId, stayId));
+        if (trCnt != null && trCnt > 0) {
+            throw BusinessException.of(409, "已有换房记录，不可撤销入住，请改用退房");
+        }
+
+        Long roomId = s.getRoomId();
+        Long reservationId = s.getReservationId();
+
+        // 1. 清账：明细 / 收款 / 账单
+        folioService.deleteByStayId(stayId);
+        // 2. 删在住记录
+        stayMapper.deleteById(stayId);
+        // 3. 房态恢复 打开+净房
+        roomService.revertOccupy(roomId);
+        // 4. 预订回退 → CONFIRMED（待入住）
+        Reservation res = reservationMapper.selectById(reservationId);
+        if (res != null && "CHECKED_IN".equals(res.getStatus())) {
+            res.setStatus("CONFIRMED");
+            res.setUpdatedAt(LocalDateTime.now());
+            reservationMapper.updateById(res);
+        }
+        return s;
+    }
+
     private long currentOperator() {
         return StaffContext.get() != null ? StaffContext.get().getStaffId() : 0L;
     }

@@ -150,7 +150,8 @@ CREATE TABLE channel (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(50) NOT NULL,
   code VARCHAR(32),
-  is_ota INT DEFAULT 0
+  is_ota INT DEFAULT 0,
+  icon VARCHAR(64)
 );
 
 -- ---------- 预订 ----------
@@ -326,9 +327,15 @@ CREATE TABLE interface_log (
 INSERT INTO hotel (id, name, code, default_deposit, checkout_time) VALUES (1, '示例酒店', 'DEMO', 500, '12:00');
 INSERT INTO staff (hotel_id, username, password_hash, real_name, status) VALUES (1, 'admin', 'bcrypt-placeholder', '管理员', 1);
 INSERT INTO channel (name, code, is_ota) VALUES
-('散客', 'WALKIN', 0),
+('线下散客', 'WALKIN', 0),
 ('携程', 'CTRIP', 1),
-('美团', 'MEITUAN', 1);
+('美团', 'MEITUAN', 1),
+('飞猪', 'FLIGGY', 1),
+('抖音', 'DOUYIN', 1),
+('高德', 'AMAP', 1),
+('美团民宿', 'MEITUAN_HOMESTAY', 1),
+('途家民宿', 'TUJIA', 1),
+('其他', 'OTHER', 0);
 INSERT INTO room_type (hotel_id, code, name, max_occupancy, bed_type, area, base_rate, rack_rate) VALUES
 (1, 'STD', '标准间', 2, '双床', 25.00, 280.00, 380.00),
 (1, 'DLB', '大床房', 2, '大床', 28.00, 320.00, 420.00);

@@ -74,6 +74,23 @@ public class FolioService {
                 .last("LIMIT 1"));
     }
 
+    /**
+     * 撤销入住时清账：删除该在住关联的全部账单及其明细、收款记录。
+     * 仅由 StayService.undoCheckin 在受控流程内调用（已校验无续住/换房）。
+     */
+    @Transactional
+    public void deleteByStayId(Long stayId) {
+        List<Folio> folios = folioMapper.selectList(new LambdaQueryWrapper<Folio>()
+                .eq(Folio::getStayId, stayId));
+        for (Folio f : folios) {
+            folioItemMapper.delete(new LambdaQueryWrapper<FolioItem>()
+                    .eq(FolioItem::getFolioId, f.getId()));
+            paymentMapper.delete(new LambdaQueryWrapper<Payment>()
+                    .eq(Payment::getFolioId, f.getId()));
+            folioMapper.deleteById(f.getId());
+        }
+    }
+
     /** 录消费（房费/杂费）。amount > 0。 */
     @Transactional
     public FolioItem addCharge(Long folioId, String category, BigDecimal amount, String remark) {

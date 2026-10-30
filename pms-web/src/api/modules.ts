@@ -23,6 +23,11 @@ export const roomApi = {
   createType: (data: any) => request.post('/room-types', data),
 }
 
+// ---------- 渠道来源 ----------
+export const channelApi = {
+  list: () => request.get('/channels'),
+}
+
 // ---------- 预订 ----------
 export const reservationApi = {
   list: (params: any) => request.get('/reservations', { params }),
@@ -47,6 +52,8 @@ export const stayApi = {
     request.put(`/stays/${id}/rate`, { rate }),
   checkout: (id: number, payment_method: string, amount?: number) =>
     request.post(`/stays/${id}/checkout`, { payment_method, amount }),
+  undoCheckin: (id: number) =>
+    request.post(`/stays/${id}/undo-checkin`),
 }
 
 // ---------- 账务 ----------

@@ -181,4 +181,70 @@ class BusinessFlowTest {
         assertThatThrownBy(() -> reservationService.cancel(d.reservation.getId(), "误订"))
                 .isInstanceOf(BusinessException.class);
     }
+
+    @Test
+    void 撤销入住_回滚在住与账务_房态恢复净房() {
+        // 预订 + 确认 + 入住（押金 500）
+        ReservationService.Detail d = reservationService.create(newReservationReq());
+        reservationService.confirm(d.reservation.getId());
+        Room vacant = roomMapper.selectList(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Room>()
+                        .eq(Room::getHotelId, 1L)
+                        .eq(Room::getRentStatus, "OPEN")
+                        .eq(Room::getCleanStatus, "CLEAN")).get(0);
+        StayService.CheckinReq ci = new StayService.CheckinReq();
+        ci.setReservationId(d.reservation.getId());
+        StayService.CheckinItem item = new StayService.CheckinItem();
+        item.setReservationRoomId(d.rooms.get(0).getId());
+        item.setRoomId(vacant.getId());
+        ci.setStayItems(List.of(item));
+        ci.setDeposit(new BigDecimal("500"));
+        ci.setDepositMethod("CASH");
+        Stay stay = stayService.checkin(ci).get(0);
+
+        // 撤销入住
+        stayService.undoCheckin(stay.getId());
+
+        // 在住已删 → get 抛 404
+        assertThatThrownBy(() -> stayService.get(stay.getId()))
+                .isInstanceOf(BusinessException.class);
+        // 账单已删 → getByStayId 返回 null
+        assertThat(folioService.getByStayId(stay.getId())).isNull();
+        // 房态恢复 打开+净房（注意：非退房的脏房）
+        Room reverted = roomMapper.selectById(vacant.getId());
+        assertThat(reverted.getRentStatus()).isEqualTo("OPEN");
+        assertThat(reverted.getCleanStatus()).isEqualTo("CLEAN");
+        // 预订回退 → CONFIRMED（待入住）
+        Reservation after = reservationService.get(d.reservation.getId());
+        assertThat(after.getStatus()).isEqualTo("CONFIRMED");
+    }
+
+    @Test
+    void 有续住记录不可撤销入住() {
+        ReservationService.Detail d = reservationService.create(newReservationReq());
+        reservationService.confirm(d.reservation.getId());
+        Room vacant = roomMapper.selectList(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Room>()
+                        .eq(Room::getHotelId, 1L)
+                        .eq(Room::getRentStatus, "OPEN")
+                        .eq(Room::getCleanStatus, "CLEAN")).get(0);
+        StayService.CheckinReq ci = new StayService.CheckinReq();
+        ci.setReservationId(d.reservation.getId());
+        StayService.CheckinItem item = new StayService.CheckinItem();
+        item.setReservationRoomId(d.rooms.get(0).getId());
+        item.setRoomId(vacant.getId());
+        ci.setStayItems(List.of(item));
+        ci.setDeposit(new BigDecimal("500"));
+        ci.setDepositMethod("CASH");
+        Stay stay = stayService.checkin(ci).get(0);
+
+        // 续住 1 晚（无收款）
+        stayService.extend(stay.getId(), 1, null, null, null);
+
+        // 撤销入住应被拒绝
+        assertThatThrownBy(() -> stayService.undoCheckin(stay.getId()))
+                .isInstanceOf(BusinessException.class);
+        // 在住仍在
+        assertThat(stayService.get(stay.getId()).getStatus()).isEqualTo("IN");
+    }
 }

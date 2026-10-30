@@ -103,4 +103,15 @@ public class RoomService {
         roomMapper.updateById(r);
         publisher.publish(r);
     }
+
+    /** 撤销入住时恢复房态：回到 打开+净房（与退房置脏不同，因其未实际占用过夜）。 */
+    public Room revertOccupy(Long roomId) {
+        Room r = roomMapper.selectById(roomId);
+        if (r == null) throw new BusinessException(404, "房号不存在");
+        r.setRentStatus("OPEN");
+        r.setCleanStatus("CLEAN");
+        roomMapper.updateById(r);
+        publisher.publish(r);
+        return r;
+    }
 }

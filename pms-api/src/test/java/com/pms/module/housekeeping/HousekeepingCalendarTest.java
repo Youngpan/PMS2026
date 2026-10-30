@@ -9,6 +9,7 @@ import com.pms.module.room.RoomMapper;
 import com.pms.module.stay.Stay;
 import com.pms.module.stay.StayExtension;
 import com.pms.module.stay.StayExtensionMapper;
+import com.pms.module.stay.StayMapper;
 import com.pms.module.stay.StayService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -34,6 +36,7 @@ class HousekeepingCalendarTest {
     @Autowired ReservationService reservationService;
     @Autowired StayService stayService;
     @Autowired RoomMapper roomMapper;
+    @Autowired StayMapper stayMapper;
     @Autowired StayExtensionMapper stayExtensionMapper;
 
     private Room vacantRoom() {
@@ -81,8 +84,37 @@ class HousekeepingCalendarTest {
         assertThat(cell).as("今日格应有预订占用").isNotNull();
         assertThat(cell.getType()).isEqualTo("reservation");
         assertThat(cell.getGuestName()).isEqualTo("CalGuest");
+        // 渠道：channelId=1 → 线下散客
+        assertThat(cell.getChannelName()).isEqualTo("线下散客");
         // checkOut 当日不覆盖（exclusive）
         assertThat(board.getCells()).doesNotContainKey(r.getId() + ":" + LocalDate.now().plusDays(2));
+    }
+
+    @Test
+    void 已退房stay在日历格显示OUT状态与渠道() {
+        Room r = vacantRoom();
+        // 直接构造一条已退房 stay（status=OUT，无 reservationId → 渠道默认线下散客）
+        Stay s = new Stay();
+        s.setHotelId(1L);
+        s.setRoomId(r.getId());
+        s.setRoomTypeId(r.getRoomTypeId());
+        s.setGuestName("OutGuest");
+        s.setGuestPhone("13900003333");
+        s.setRate(new BigDecimal("280"));
+        s.setCheckInAt(LocalDate.now().atTime(14, 0));
+        s.setCheckOutAt(LocalDate.now().plusDays(1).atTime(12, 0));
+        s.setStatus("OUT");
+        s.setType("STAY");
+        stayMapper.insert(s);
+
+        CalendarBoard board = housekeepingService.calendar(LocalDate.now(), LocalDate.now());
+        Cell cell = board.getCells().get(r.getId() + ":" + LocalDate.now());
+        assertThat(cell).as("今日格应有已退房 stay 占用").isNotNull();
+        assertThat(cell.getType()).isEqualTo("stay");
+        assertThat(cell.getStatus()).isEqualTo("OUT");
+        assertThat(cell.getGuestName()).isEqualTo("OutGuest");
+        // 无 reservationId 的 stay → 线下散客
+        assertThat(cell.getChannelName()).isEqualTo("线下散客");
     }
 
     @Test
@@ -101,6 +133,8 @@ class HousekeepingCalendarTest {
         assertThat(cell).isNotNull();
         assertThat(cell.getType()).isEqualTo("stay");
         assertThat(cell.isHourly()).isTrue();
+        // 钟点房无 reservation → 渠道默认线下散客
+        assertThat(cell.getChannelName()).isEqualTo("线下散客");
 
         // 续住 2 天，收款 100
         StayExtension ext = stayService.extend(s.getId(), 2, new BigDecimal("100"), "WECHAT", "续住备注");

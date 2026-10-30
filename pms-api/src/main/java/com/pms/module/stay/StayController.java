@@ -78,4 +78,11 @@ public class StayController {
         }
         return Result.ok(stayService.checkout(id, method, amount));
     }
+
+    /** 撤销入住（已入住→待入住）：回滚在住+账务，房态恢复，预订回 CONFIRMED。 */
+    @com.pms.common.OpLog(module = "M2", action = "撤销入住")
+    @PostMapping("/{id}/undo-checkin")
+    public Result<Stay> undoCheckin(@PathVariable Long id) {
+        return Result.ok(stayService.undoCheckin(id));
+    }
 }
