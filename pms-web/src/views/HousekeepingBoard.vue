@@ -126,10 +126,10 @@
                width="360px">
       <div v-if="rangeSelected" style="display:flex; flex-direction:column; gap:10px">
         <div v-if="rangeNights() < 1" class="range-tip">
-          已选择同日（{{ rangeSelected.start }}）。录入订单需至少 1 晚，可改为备注或关闭房间。
+          已选择同日（{{ rangeSelected.start }}）：入住日期为当天，离店默认次日（可在弹窗修改）。
         </div>
-        <el-button type="primary" :disabled="rangeNights() < 1" @click="rangeCreateOrder">
-          录入订单（{{ rangeNights() }} 晚）
+        <el-button type="primary" @click="rangeCreateOrder">
+          录入订单（{{ rangeNights() < 1 ? '当天入住' : rangeNights() + ' 晚' }}）
         </el-button>
         <el-button @click="rangeRemark">备注{{ rangeSelected.room.remark ? '（已有）' : '' }}</el-button>
         <el-button type="danger" @click="rangeCloseRoom">关闭房间</el-button>
@@ -308,9 +308,11 @@ function rangeNights() {
 function rangeCreateOrder() {
   const rs = rangeSelected.value!
   rangeActionVisible.value = false
+  const single = rs.start === rs.end
   createPrefill.value = {
     checkInDate: rs.start,
-    checkOutDate: rs.end,   // 第二次点击即离店日
+    // 多日选房：第二次点击即离店日；单日选房：仅入住日，离店由弹窗默认次日
+    checkOutDate: single ? '' : rs.end,
     roomTypeId: rs.room.roomTypeId,
     assignedRoomId: rs.room.id,
     roomNumber: rs.room.number,
