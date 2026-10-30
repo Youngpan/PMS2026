@@ -80,6 +80,9 @@ export const housekeepingApi = {
   reportMaintenance: (data: any) => request.post('/housekeeping/maintenance', data),
   fixMaintenance: (id: number) => request.put(`/housekeeping/maintenance/${id}/fix`),
   maintenances: (params: any) => request.get('/housekeeping/maintenance', { params }),
+  blockRoom: (room_id: number, start: string, end: string, reason?: string) =>
+    request.post('/housekeeping/blocks', { room_id, start, end, reason }),
+  releaseBlock: (id: number) => request.put(`/housekeeping/blocks/${id}/release`),
 }
 
 // ---------- 报表 ----------

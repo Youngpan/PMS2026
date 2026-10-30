@@ -65,4 +65,20 @@ public class HousekeepingController {
     public Result<Maintenance> fix(@PathVariable Long id) {
         return Result.ok(housekeepingService.fixMaintenance(id));
     }
+
+    /** 按日期范围封房（关闭房间）：body {room_id, start, end, reason}。 */
+    @PostMapping("/blocks")
+    public Result<com.pms.module.housekeeping.RoomBlock> block(@RequestBody Map<String, Object> body) {
+        Long roomId = ((Number) body.get("room_id")).longValue();
+        LocalDate start = LocalDate.parse(body.get("start").toString());
+        LocalDate end = LocalDate.parse(body.get("end").toString());
+        String reason = body.get("reason") == null ? null : body.get("reason").toString();
+        return Result.ok(housekeepingService.blockRoom(roomId, start, end, reason));
+    }
+
+    /** 释放封房：封房记录置 RELEASED，对应日期格子恢复可售。 */
+    @PutMapping("/blocks/{id}/release")
+    public Result<com.pms.module.housekeeping.RoomBlock> releaseBlock(@PathVariable Long id) {
+        return Result.ok(housekeepingService.releaseBlock(id));
+    }
 }

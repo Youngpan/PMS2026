@@ -37,6 +37,7 @@ public class HousekeepingService {
 
     private final HousekeepingTaskMapper taskMapper;
     private final MaintenanceMapper maintenanceMapper;
+    private final RoomBlockMapper roomBlockMapper;
     private final RoomMapper roomMapper;
     private final StayMapper stayMapper;
     private final ReservationMapper reservationMapper;
@@ -114,6 +115,15 @@ public class HousekeepingService {
         Channel walkin = channelById.values().stream()
                 .filter(c -> "WALKIN".equals(c.getCode())).findFirst().orElse(null);
 
+        // 按日期范围封房（ACTIVE，区间与 [from,to] 重叠）：按 roomId 分组
+        List<RoomBlock> blocks = roomBlockMapper.selectList(new LambdaQueryWrapper<RoomBlock>()
+                .eq(RoomBlock::getHotelId, hotelId)
+                .eq(RoomBlock::getStatus, "ACTIVE")
+                .le(RoomBlock::getStartDate, to)
+                .ge(RoomBlock::getEndDate, from));
+        Map<Long, List<RoomBlock>> blocksByRoom = blocks.stream()
+                .collect(Collectors.groupingBy(RoomBlock::getRoomId));
+
         Map<String, Cell> cells = new LinkedHashMap<>();
         for (Room r : rooms) {
             Stay st = stayByRoom.get(r.getId());
@@ -128,12 +138,21 @@ public class HousekeepingService {
                 stayChannel = cid == null ? null : channelById.get(cid);
             }
             Channel resChannel = res == null || res.getChannelId() == null ? null : channelById.get(res.getChannelId());
+            List<RoomBlock> roomBlocks = blocksByRoom.get(r.getId());
             for (String d : dates) {
                 LocalDate date = LocalDate.parse(d);
                 if (st != null && coversStay(st, date)) {
                     cells.put(r.getId() + ":" + d, cellOfStay(st, r.getId(), d, stayChannel));
                 } else if (res != null && coversReservation(res, date)) {
                     cells.put(r.getId() + ":" + d, cellOfReservation(res, r.getId(), d, resChannel));
+                } else if (roomBlocks != null) {
+                    // 封房填充空格（在住/预订优先展示）；命中即取首条
+                    for (RoomBlock b : roomBlocks) {
+                        if (coversBlock(b, date)) {
+                            cells.put(r.getId() + ":" + d, cellOfBlock(b, r.getId(), d));
+                            break;
+                        }
+                    }
                 }
             }
         }
@@ -167,6 +186,11 @@ public class HousekeepingService {
         return date.isBefore(res.getCheckOutDate());
     }
 
+    /** 封房覆盖某日：start_date ≤ date ≤ end_date（含首尾两日）。 */
+    private boolean coversBlock(RoomBlock b, LocalDate date) {
+        return !date.isBefore(b.getStartDate()) && !date.isAfter(b.getEndDate());
+    }
+
     private Cell cellOfStay(Stay s, Long roomId, String date, Channel channel) {
         Cell c = new Cell();
         c.setType("stay");
@@ -194,6 +218,21 @@ public class HousekeepingService {
         c.setCheckOut(res.getCheckOutDate().toString());
         c.setHourly(false);
         applyChannel(c, channel);
+        return c;
+    }
+
+    private Cell cellOfBlock(RoomBlock b, Long roomId, String date) {
+        Cell c = new Cell();
+        c.setType("block");
+        c.setId(b.getId());
+        c.setRoomId(roomId);
+        c.setDate(date);
+        c.setStatus(b.getStatus());
+        c.setGuestName("封房");
+        c.setCheckIn(b.getStartDate().toString());
+        c.setCheckOut(b.getEndDate().toString());
+        c.setHourly(false);
+        c.setReason(b.getReason());
         return c;
     }
 
@@ -291,6 +330,54 @@ public class HousekeepingService {
                 .orderByDesc(Maintenance::getCreatedAt));
     }
 
+    /**
+     * 按日期范围封房（关闭房间）：与全房间 rent_status=CLOSED 的报修不同，
+     * 仅在 [start,end]（含首尾）期间关闭该房可售。到期或释放后自动恢复。
+     * 拒绝与该房已有 ACTIVE 封房区间重叠的请求。
+     */
+    @Transactional
+    public RoomBlock blockRoom(Long roomId, LocalDate start, LocalDate end, String reason) {
+        Room r = roomMapper.selectById(roomId);
+        if (r == null) throw new BusinessException(404, "房号不存在");
+        if (start == null || end == null || end.isBefore(start)) {
+            throw BusinessException.of(400, "封房日期非法");
+        }
+        // 同房已有 ACTIVE 封房与 [start,end] 重叠则拒绝
+        List<RoomBlock> active = roomBlockMapper.selectList(new LambdaQueryWrapper<RoomBlock>()
+                .eq(RoomBlock::getHotelId, hotelId)
+                .eq(RoomBlock::getRoomId, roomId)
+                .eq(RoomBlock::getStatus, "ACTIVE")
+                .le(RoomBlock::getStartDate, end)
+                .ge(RoomBlock::getEndDate, start));
+        if (!active.isEmpty()) {
+            throw BusinessException.of(409, "该房间所选日期已有封房记录");
+        }
+
+        RoomBlock b = new RoomBlock();
+        b.setHotelId(hotelId);
+        b.setRoomId(roomId);
+        b.setStartDate(start);
+        b.setEndDate(end);
+        b.setReason(reason);
+        b.setStatus("ACTIVE");
+        b.setOperatorId(currentOperator());
+        b.setCreatedAt(LocalDateTime.now());
+        roomBlockMapper.insert(b);
+        return b;
+    }
+
+    /** 释放封房：置 RELEASED，对应日期格子即恢复可售。 */
+    @Transactional
+    public RoomBlock releaseBlock(Long blockId) {
+        RoomBlock b = roomBlockMapper.selectById(blockId);
+        if (b == null) throw new BusinessException(404, "封房记录不存在");
+        if (!"ACTIVE".equals(b.getStatus())) throw BusinessException.of(409, "封房已释放");
+        b.setStatus("RELEASED");
+        b.setReleasedAt(LocalDateTime.now());
+        roomBlockMapper.updateById(b);
+        return b;
+    }
+
     private long currentOperator() {
         return StaffContext.get() != null ? StaffContext.get().getStaffId() : 0L;
     }
@@ -326,5 +413,7 @@ public class HousekeepingService {
         private String channelName;
         /** 渠道图标标识（预留，后续填充） */
         private String channelIcon;
+        /** 封房原因（type=block 时填充） */
+        private String reason;
     }
 }

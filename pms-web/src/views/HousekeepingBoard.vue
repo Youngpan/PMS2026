@@ -36,7 +36,11 @@
                 @mouseenter="onCellHover(r, d)">
               <template v-if="cellOf(r, d)">
                 <div class="guest">{{ name2(cellOf(r, d).guestName) }}</div>
-                <div class="ch"><i class="ch-icon" />{{ cellOf(r, d).channelName || '—' }}</div>
+                <div class="ch">
+                  <i class="ch-icon" />
+                  <template v-if="cellOf(r, d).type === 'block'">{{ cellOf(r, d).reason || '封房中' }}</template>
+                  <template v-else>{{ cellOf(r, d).channelName || '—' }}</template>
+                </div>
               </template>
               <template v-else>
                 <button class="more-btn" title="更多操作" @click.stop="openCell(r, d)">⋯</button>
@@ -52,7 +56,7 @@
       <span class="lg cell-res"></span>已排房(预订)
       <span class="lg cell-clean"></span>打开·净
       <span class="lg cell-dirty"></span>打开·脏
-      <span class="lg cell-closed"></span>关闭
+      <span class="lg cell-closed"></span>关闭/封房
     </div>
 
     <!-- 格子操作面板 -->
@@ -84,6 +88,14 @@
         <template v-else-if="selected.cell.type === 'reservation'">
           <el-button type="warning" @click="onCheckin">改为已入住（办理入住）</el-button>
           <div style="color:#999; font-size:12px">预订号 #{{ selected.cell.id }} · {{ selected.cell.status }}（待入住）</div>
+        </template>
+        <!-- 封房操作 -->
+        <template v-else-if="selected.cell.type === 'block'">
+          <el-button type="warning" @click="onReleaseBlock">释放封房（恢复可售）</el-button>
+          <div style="color:#999; font-size:12px">
+            封房 #{{ selected.cell.id }} · {{ selected.cell.checkIn }} → {{ selected.cell.checkOut }}
+            {{ selected.cell.reason ? ' · ' + selected.cell.reason : '' }}
+          </div>
         </template>
         <!-- 在住操作 -->
         <template v-else-if="selected.cell.type === 'stay'">
@@ -206,7 +218,7 @@ const actionTitle = computed(() => {
   if (!selected.value) return ''
   const r = selected.value.room
   const c = selected.value.cell
-  return c ? `房号 ${r.number} · ${selected.value.date}（${c.type === 'stay' ? '在住' : '预订'}）`
+  return c ? `房号 ${r.number} · ${selected.value.date}（${c.type === 'stay' ? '在住' : c.type === 'block' ? '封房' : '预订'}）`
            : `房号 ${r.number} · ${selected.value.date}（空房）`
 })
 
@@ -247,7 +259,11 @@ function inRange(r: any, d: string) {
 }
 function cellClass(r: any, d: string) {
   const c = cellOf(r, d)
-  if (c) return c.type === 'stay' ? 'cell-stay' : 'cell-res'
+  if (c) {
+    if (c.type === 'stay') return 'cell-stay'
+    if (c.type === 'block') return 'cell-closed'
+    return 'cell-res'
+  }
   if (r.rentStatus === 'CLOSED') return 'cell-closed'
   if (inRange(r, d)) return 'cell-clean cell-range'
   return r.cleanStatus === 'DIRTY' ? 'cell-dirty' : 'cell-clean'
@@ -301,12 +317,35 @@ function rangeCreateOrder() {
   }
   createVisible.value = true
 }
-async function rangeCloseRoom() {
-  const r = rangeSelected.value!.room
+/** 按选中日期范围封房（关闭该房在 [start,end] 的可售），非全房间 CLOSED。 */
+function rangeCloseRoom() {
+  const rs = rangeSelected.value!
   rangeActionVisible.value = false
-  await roomApi.setRentStatus(r.id, 'CLOSED')
-  ElMessage.success('已关闭')
-  load()
+  ElMessageBox.prompt('封房原因（可选）', `封房 ${rs.room.number} · ${rs.start} → ${rs.end}`, {
+    inputPlaceholder: '如：维修、自用',
+    confirmButtonText: '确认封房',
+    cancelButtonText: '取消',
+    inputValue: '',
+  }).then(async ({ value }) => {
+    await housekeepingApi.blockRoom(rs.room.id, rs.start, rs.end, value || undefined)
+    ElMessage.success('已封房（该日期段关闭）')
+    load()
+  }).catch(() => {})
+}
+
+/** 释放封房：恢复该房所选日期的可售。 */
+function onReleaseBlock() {
+  const cell = selected.value!.cell
+  actionVisible.value = false
+  ElMessageBox.confirm(
+    `释放封房后，该房 ${cell.checkIn} → ${cell.checkOut} 恢复可售。确认？`,
+    '释放封房',
+    { type: 'warning', confirmButtonText: '确认释放', cancelButtonText: '取消' },
+  ).then(async () => {
+    await housekeepingApi.releaseBlock(cell.id)
+    ElMessage.success('已释放封房')
+    load()
+  }).catch(() => {})
 }
 function rangeRemark() {
   const r = rangeSelected.value!.room

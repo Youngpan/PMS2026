@@ -298,6 +298,21 @@ CREATE TABLE maintenance (
   fixed_at TIMESTAMP NULL
 );
 
+-- ---------- 房间封房（按日期范围关闭） ----------
+DROP TABLE IF EXISTS room_block;
+CREATE TABLE room_block (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  hotel_id BIGINT NOT NULL,
+  room_id BIGINT NOT NULL,
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  reason VARCHAR(255),
+  status VARCHAR(16) DEFAULT 'ACTIVE',
+  operator_id BIGINT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  released_at TIMESTAMP NULL
+);
+
 -- ---------- 夜审 ----------
 DROP TABLE IF EXISTS night_audit;
 CREATE TABLE night_audit (
