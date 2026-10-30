@@ -90,11 +90,11 @@ public class HousekeepingService {
         Map<Long, Stay> stayByRoom = stays.stream()
                 .collect(Collectors.toMap(Stay::getRoomId, s -> s, (a, b) -> a));
 
-        // 已排房 reservation_room（assigned_room_id 非空）
+        // 已排房 reservation_room（assigned_room_id 非空）：同房可能有多条历史明细，按房间分组
         List<ReservationRoom> rrs = reservationRoomMapper.selectList(new LambdaQueryWrapper<ReservationRoom>()
                 .isNotNull(ReservationRoom::getAssignedRoomId));
-        Map<Long, ReservationRoom> rrByRoom = rrs.stream()
-                .collect(Collectors.toMap(ReservationRoom::getAssignedRoomId, r -> r, (a, b) -> a));
+        Map<Long, List<ReservationRoom>> rrByRoom = rrs.stream()
+                .collect(Collectors.groupingBy(ReservationRoom::getAssignedRoomId));
 
         // 合并加载 reservation：stay.reservationId（非空）+ reservation_room 引用
         List<Long> resIds = new ArrayList<>(rrs.stream().map(ReservationRoom::getReservationId).distinct().toList());
@@ -127,8 +127,16 @@ public class HousekeepingService {
         Map<String, Cell> cells = new LinkedHashMap<>();
         for (Room r : rooms) {
             Stay st = stayByRoom.get(r.getId());
-            ReservationRoom rr = rrByRoom.get(r.getId());
-            Reservation res = rr == null ? null : resById.get(rr.getReservationId());
+            // 该房所有已加载预订（status 与日期窗均达标），按入住日升序，逐日命中首条覆盖者
+            List<Reservation> roomRes = new ArrayList<>();
+            List<ReservationRoom> roomRrs = rrByRoom.get(r.getId());
+            if (roomRrs != null) {
+                for (ReservationRoom rr : roomRrs) {
+                    Reservation res = resById.get(rr.getReservationId());
+                    if (res != null) roomRes.add(res);
+                }
+                roomRes.sort(java.util.Comparator.comparing(Reservation::getCheckInDate));
+            }
             // stay 渠道：有 reservation 取 res.channelId，否则 WALKIN
             Channel stayChannel = null;
             if (st != null) {
@@ -137,14 +145,21 @@ public class HousekeepingService {
                         : (walkin == null ? null : walkin.getId());
                 stayChannel = cid == null ? null : channelById.get(cid);
             }
-            Channel resChannel = res == null || res.getChannelId() == null ? null : channelById.get(res.getChannelId());
             List<RoomBlock> roomBlocks = blocksByRoom.get(r.getId());
             for (String d : dates) {
                 LocalDate date = LocalDate.parse(d);
                 if (st != null && coversStay(st, date)) {
                     cells.put(r.getId() + ":" + d, cellOfStay(st, r.getId(), d, stayChannel));
-                } else if (res != null && coversReservation(res, date)) {
-                    cells.put(r.getId() + ":" + d, cellOfReservation(res, r.getId(), d, resChannel));
+                    continue;
+                }
+                // 多预订取首条覆盖该日者
+                Reservation hit = null;
+                for (Reservation res : roomRes) {
+                    if (coversReservation(res, date)) { hit = res; break; }
+                }
+                if (hit != null) {
+                    Channel resChannel = hit.getChannelId() == null ? null : channelById.get(hit.getChannelId());
+                    cells.put(r.getId() + ":" + d, cellOfReservation(hit, r.getId(), d, resChannel));
                 } else if (roomBlocks != null) {
                     // 封房填充空格（在住/预订优先展示）；命中即取首条
                     for (RoomBlock b : roomBlocks) {
