@@ -91,6 +91,33 @@ class HousekeepingCalendarTest {
     }
 
     @Test
+    void 看板录入订单带房号自动确认并显示日历格() {
+        // 看板录入订单：创建时即绑定 assignedRoomId，应自动 CONFIRMED（无需手动确认），日历立即显示预订格
+        Room r = vacantRoom();
+        ReservationService.CreateReq req = new ReservationService.CreateReq();
+        req.setGuestName("BoardGuest");
+        req.setGuestPhone("13900004444");
+        req.setCheckInDate(LocalDate.now());
+        req.setCheckOutDate(LocalDate.now().plusDays(2));
+        req.setChannelId(1L);
+        ReservationService.RoomLine line = new ReservationService.RoomLine();
+        line.setRoomTypeId(r.getRoomTypeId());
+        line.setRoomCount(1);
+        line.setRate(new BigDecimal("280"));
+        line.setAssignedRoomId(r.getId());
+        req.setRooms(List.of(line));
+
+        ReservationService.Detail d = reservationService.create(req);
+        assertThat(d.reservation.getStatus()).as("带房号的订单应自动确认").isEqualTo("CONFIRMED");
+
+        CalendarBoard board = housekeepingService.calendar(LocalDate.now(), LocalDate.now().plusDays(2));
+        Cell cell = board.getCells().get(r.getId() + ":" + LocalDate.now());
+        assertThat(cell).as("看板录入订单应立即在日历显示预订格").isNotNull();
+        assertThat(cell.getType()).isEqualTo("reservation");
+        assertThat(cell.getGuestName()).isEqualTo("BoardGuest");
+    }
+
+    @Test
     void 已退房stay在日历格显示OUT状态与渠道() {
         Room r = vacantRoom();
         // 直接构造一条已退房 stay（status=OUT，无 reservationId → 渠道默认线下散客）

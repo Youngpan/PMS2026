@@ -64,6 +64,8 @@ public class ReservationService {
         if (req.getRooms() == null || req.getRooms().isEmpty()) {
             throw new BusinessException("至少需要一条房型明细");
         }
+        // 已绑具体房号（看板录入订单）→ 直接确认并锁房；否则为待确认散单
+        boolean hasAssignedRoom = req.getRooms().stream().anyMatch(l -> l.getAssignedRoomId() != null);
 
         Reservation r = new Reservation();
         r.setHotelId(hotelId);
@@ -74,7 +76,7 @@ public class ReservationService {
         r.setCheckOutDate(req.getCheckOutDate());
         r.setNights((int) (req.getCheckOutDate().toEpochDay() - req.getCheckInDate().toEpochDay()));
         r.setChannelId(req.getChannelId());
-        r.setStatus("PENDING");
+        r.setStatus(hasAssignedRoom ? "CONFIRMED" : "PENDING");
         r.setBookerId(StaffContext.get() != null ? StaffContext.get().getStaffId() : 0L);
         r.setRemark(req.getRemark());
         r.setCreatedAt(LocalDateTime.now());
