@@ -4,12 +4,15 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.pms.common.BusinessException;
 import com.pms.common.PageResult;
+import com.pms.ota.OtaEvent;
+import com.pms.ota.OtaEventPublisher;
 import com.pms.ws.RoomStatusPublisher;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -17,6 +20,7 @@ public class RoomService {
 
     private final RoomMapper roomMapper;
     private final RoomStatusPublisher publisher;
+    private final OtaEventPublisher otaEventPublisher;
 
     @Value("${pms.hotel.id}")
     private Long hotelId;
@@ -49,6 +53,8 @@ public class RoomService {
         r.setRentStatus(rentStatus);
         roomMapper.updateById(r);
         publisher.publish(r);
+        otaEventPublisher.publish(OtaEvent.RefType.ROOM_AVAILABILITY, roomId, "RENT_CHANGED", null,
+                Map.of("roomId", roomId, "rentStatus", rentStatus, "roomTypeId", r.getRoomTypeId()));
         return r;
     }
 
@@ -59,6 +65,8 @@ public class RoomService {
         r.setCleanStatus(cleanStatus);
         roomMapper.updateById(r);
         publisher.publish(r);
+        otaEventPublisher.publish(OtaEvent.RefType.ROOM_AVAILABILITY, roomId, "CLEAN_CHANGED", null,
+                Map.of("roomId", roomId, "cleanStatus", cleanStatus, "roomTypeId", r.getRoomTypeId()));
         return r;
     }
 

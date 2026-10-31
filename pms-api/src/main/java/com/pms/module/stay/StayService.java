@@ -10,6 +10,8 @@ import com.pms.module.reservation.ReservationRoom;
 import com.pms.module.reservation.ReservationRoomMapper;
 import com.pms.module.room.Room;
 import com.pms.module.room.RoomService;
+import com.pms.ota.OtaEvent;
+import com.pms.ota.OtaEventPublisher;
 import com.pms.security.StaffContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,6 +23,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 入住/退房/续住/换房。
@@ -37,6 +40,7 @@ public class StayService {
     private final ReservationMapper reservationMapper;
     private final ReservationRoomMapper reservationRoomMapper;
     private final FolioService folioService;
+    private final OtaEventPublisher otaEventPublisher;
 
     @Value("${pms.hotel.id}")
     private Long hotelId;
@@ -109,6 +113,8 @@ public class StayService {
         res.setStatus("CHECKED_IN");
         res.setUpdatedAt(LocalDateTime.now());
         reservationMapper.updateById(res);
+        otaEventPublisher.publish(OtaEvent.RefType.RESERVATION, res.getId(), "CHECKED_IN", res.getChannelId(),
+                Map.of("status", "CHECKED_IN", "stayIds", created.stream().map(Stay::getId).toList()));
         return created;
     }
 
@@ -257,6 +263,8 @@ public class StayService {
             res.setStatus("CHECKED_OUT");
             res.setUpdatedAt(LocalDateTime.now());
             reservationMapper.updateById(res);
+            otaEventPublisher.publish(OtaEvent.RefType.RESERVATION, res.getId(), "CHECKED_OUT", res.getChannelId(),
+                    Map.of("status", "CHECKED_OUT", "stayId", stayId));
         }
         return s;
     }
@@ -276,6 +284,8 @@ public class StayService {
             res.setStatus("CHECKED_OUT");
             res.setUpdatedAt(LocalDateTime.now());
             reservationMapper.updateById(res);
+            otaEventPublisher.publish(OtaEvent.RefType.RESERVATION, res.getId(), "CHECKED_OUT", res.getChannelId(),
+                    Map.of("status", "CHECKED_OUT", "stayId", stayId));
         }
         return s;
     }
@@ -320,6 +330,8 @@ public class StayService {
             res.setStatus("CONFIRMED");
             res.setUpdatedAt(LocalDateTime.now());
             reservationMapper.updateById(res);
+            otaEventPublisher.publish(OtaEvent.RefType.RESERVATION, res.getId(), "REVERTED_TO_CONFIRMED", res.getChannelId(),
+                    Map.of("status", "CONFIRMED", "stayId", stayId));
         }
         return s;
     }

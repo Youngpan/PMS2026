@@ -14,6 +14,8 @@ import com.pms.module.stay.Stay;
 import com.pms.module.stay.StayExtension;
 import com.pms.module.stay.StayExtensionMapper;
 import com.pms.module.stay.StayMapper;
+import com.pms.ota.OtaEvent;
+import com.pms.ota.OtaEventPublisher;
 import com.pms.security.StaffContext;
 import com.pms.ws.RoomStatusPublisher;
 import lombok.Data;
@@ -47,6 +49,7 @@ public class HousekeepingService {
     private final ReservationRoomMapper reservationRoomMapper;
     private final ChannelMapper channelMapper;
     private final RoomStatusPublisher publisher;
+    private final OtaEventPublisher otaEventPublisher;
 
     @Value("${pms.hotel.id}")
     private Long hotelId;
@@ -407,6 +410,8 @@ public class HousekeepingService {
         b.setOperatorId(currentOperator());
         b.setCreatedAt(LocalDateTime.now());
         roomBlockMapper.insert(b);
+        otaEventPublisher.publish(OtaEvent.RefType.ROOM_AVAILABILITY, roomId, "BLOCKED", null,
+                Map.of("roomId", roomId, "start", start.toString(), "end", end.toString(), "reason", reason == null ? "" : reason));
         return b;
     }
 
@@ -419,6 +424,8 @@ public class HousekeepingService {
         b.setStatus("RELEASED");
         b.setReleasedAt(LocalDateTime.now());
         roomBlockMapper.updateById(b);
+        otaEventPublisher.publish(OtaEvent.RefType.ROOM_AVAILABILITY, b.getRoomId(), "RELEASED", null,
+                Map.of("roomId", b.getRoomId(), "start", b.getStartDate().toString(), "end", b.getEndDate().toString()));
         return b;
     }
 

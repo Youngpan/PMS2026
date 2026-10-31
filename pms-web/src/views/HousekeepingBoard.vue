@@ -132,7 +132,7 @@
           录入订单（{{ rangeNights() < 1 ? '当天入住' : rangeNights() + ' 晚' }}）
         </el-button>
         <el-button @click="rangeRemark">备注{{ rangeSelected.room.remark ? '（已有）' : '' }}</el-button>
-        <el-button type="danger" @click="rangeCloseRoom">关闭房间</el-button>
+        <el-button :type="rangeSelected.room.rentStatus === 'CLOSED' ? 'warning' : 'danger'" @click="rangeCloseRoom">{{ rangeSelected.room.rentStatus === 'CLOSED' ? '打开房间' : '关闭房间' }}</el-button>
       </div>
     </el-dialog>
 
@@ -264,7 +264,7 @@ function cellClass(r: any, d: string) {
     if (c.type === 'block') return 'cell-closed'
     return 'cell-res'
   }
-  if (r.rentStatus === 'CLOSED') return 'cell-closed'
+  if (r.rentStatus === 'CLOSED') return inRange(r, d) ? 'cell-closed cell-range' : 'cell-closed'
   if (inRange(r, d)) return 'cell-clean cell-range'
   return r.cleanStatus === 'DIRTY' ? 'cell-dirty' : 'cell-clean'
 }
@@ -272,8 +272,7 @@ function cellClass(r: any, d: string) {
 function onCellClick(r: any, d: string) {
   const c = cellOf(r, d)
   if (c) { openCell(r, d); return }            // occupied → 操作弹窗
-  if (r.rentStatus === 'CLOSED') return        // 关闭房：左键无效（⋯ 处理）
-  // 空房·OPEN → 范围选房
+  // 空格（含已关闭房）→ 范围选房，左键点选出现蓝色选中样式
   if (!rangeStart.value) {
     rangeStart.value = { roomId: r.id, date: d }
     rangeHover.value = { roomId: r.id, date: d }
@@ -292,7 +291,7 @@ function onCellClick(r: any, d: string) {
 }
 function onCellHover(r: any, d: string) {
   if (!rangeStart.value) return
-  if (r.rentStatus === 'CLOSED' || cellOf(r, d)) return
+  if (cellOf(r, d)) return
   if (r.id === rangeStart.value.roomId) rangeHover.value = { roomId: r.id, date: d }
 }
 function openRangeAction(start: string, end: string, r: any) {
@@ -319,10 +318,17 @@ function rangeCreateOrder() {
   }
   createVisible.value = true
 }
-/** 按选中日期范围封房（关闭该房在 [start,end] 的可售），非全房间 CLOSED。 */
+/** 关闭/打开房间：已关闭房 → 整房打开(rent_status=OPEN)；打开房 → 按选中日期范围封房。 */
 function rangeCloseRoom() {
   const rs = rangeSelected.value!
   rangeActionVisible.value = false
+  if (rs.room.rentStatus === 'CLOSED') {
+    roomApi.setRentStatus(rs.room.id, 'OPEN').then(() => {
+      ElMessage.success('已打开房间')
+      load()
+    })
+    return
+  }
   ElMessageBox.prompt('封房原因（可选）', `封房 ${rs.room.number} · ${rs.start} → ${rs.end}`, {
     inputPlaceholder: '如：维修、自用',
     confirmButtonText: '确认封房',
@@ -550,15 +556,15 @@ onUnmounted(() => {
 .cal .cell:hover { outline: 2px solid #409eff; outline-offset: -2px; }
 .cal .cell-stay { background: #d9ecff; }
 .cal .cell-res { background: #d1edc4; }
-.cal .cell-clean { background: #f0f9eb; }
+.cal .cell-clean { background: #ffffff; }
 .cal .cell-dirty { background: #fdf6ec; }
-.cal .cell-closed { background: #909399; color: #c0c4cc; cursor: default; }
-.cal .cell-closed:hover { outline: none; }
-/* 关闭房斜杠：对角线 */
+.cal .cell-closed { background: #909399; color: #c0c4cc; cursor: pointer; }
+/* 关闭房斜杠：对角线；选中(cell-range)时隐藏，让蓝色选中样式干净 */
 .cal .cell-closed::after {
   content: ''; position: absolute; inset: 0; pointer-events: none;
   background: linear-gradient(to top right, transparent calc(50% - 1px), #c0c4cc 50%, transparent calc(50% + 1px));
 }
+.cal .cell-closed.cell-range::after { display: none; }
 /* 范围选房高亮 */
 .cal .cell-range { background: #ecf5ff !important; box-shadow: inset 0 0 0 2px #409eff; }
 .cal .guest { font-weight: 600; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -582,7 +588,7 @@ onUnmounted(() => {
 .lg { display: inline-block; width: 14px; height: 14px; border: 1px solid #ddd; margin: 0 4px 0 12px; vertical-align: middle; }
 .lg.cell-stay { background: #d9ecff; }
 .lg.cell-res { background: #d1edc4; }
-.lg.cell-clean { background: #f0f9eb; }
+.lg.cell-clean { background: #ffffff; }
 .lg.cell-dirty { background: #fdf6ec; }
 .lg.cell-closed { background: #909399; position: relative; }
 .lg.cell-closed::after { content:''; position:absolute; inset:0; background: linear-gradient(to top right, transparent calc(50% - 1px), #c0c4cc 50%, transparent calc(50% + 1px)); }

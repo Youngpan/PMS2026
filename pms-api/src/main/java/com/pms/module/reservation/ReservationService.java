@@ -5,6 +5,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.pms.common.BusinessException;
 import com.pms.common.PageResult;
+import com.pms.ota.OtaEvent;
+import com.pms.ota.OtaEventPublisher;
 import com.pms.security.StaffContext;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -22,6 +25,7 @@ public class ReservationService {
 
     private final ReservationMapper reservationMapper;
     private final ReservationRoomMapper reservationRoomMapper;
+    private final OtaEventPublisher otaEventPublisher;
 
     @Value("${pms.hotel.id}")
     private Long hotelId;
@@ -92,6 +96,9 @@ public class ReservationService {
             rr.setAssignedRoomId(line.getAssignedRoomId());
             reservationRoomMapper.insert(rr);
         }
+        otaEventPublisher.publish(OtaEvent.RefType.RESERVATION, r.getId(),
+                hasAssignedRoom ? "CREATED_CONFIRMED" : "CREATED", r.getChannelId(),
+                Map.of("status", r.getStatus(), "checkIn", r.getCheckInDate().toString(), "checkOut", r.getCheckOutDate().toString()));
         return detail(r.getId());
     }
 
@@ -137,6 +144,7 @@ public class ReservationService {
         r.setStatus("CONFIRMED");
         r.setUpdatedAt(LocalDateTime.now());
         reservationMapper.updateById(r);
+        otaEventPublisher.publish(OtaEvent.RefType.RESERVATION, r.getId(), "CONFIRMED", r.getChannelId(), Map.of("status", "CONFIRMED"));
         return r;
     }
 
@@ -150,6 +158,7 @@ public class ReservationService {
         r.setRemark(reason);
         r.setUpdatedAt(LocalDateTime.now());
         reservationMapper.updateById(r);
+        otaEventPublisher.publish(OtaEvent.RefType.RESERVATION, r.getId(), "CANCELLED", r.getChannelId(), Map.of("status", "CANCELLED", "reason", reason == null ? "" : reason));
         return r;
     }
 
