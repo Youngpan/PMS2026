@@ -30,6 +30,7 @@ admin / admin（后端首次启动自动初始化）
 | /reservations | 预订管理 | /reservations |
 | /stays | 在住看板(入住/换房/退房) | /stays |
 | /housekeeping | 房态看板(派单/报修) | /housekeeping |
+| /rooms | 房型与房号(新增/编辑/批量生成) | /room-types、/rooms |
 | /folios/:id | 账单(消费/押金/收款/收据) | /folios |
 | /reports | 营收/出租率/客账余额 | /reports/* |
 | /system/staff | 员工管理 | /staff |

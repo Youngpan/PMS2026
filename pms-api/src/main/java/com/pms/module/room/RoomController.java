@@ -29,6 +29,18 @@ public class RoomController {
         return Result.ok(roomService.create(room));
     }
 
+    /** 批量新增房号（一次录入整层/整栋）。 */
+    @PostMapping("/batch")
+    public Result<List<Room>> batchCreate(@RequestBody RoomBatchRequest req) {
+        return Result.ok(roomService.batchCreate(req));
+    }
+
+    /** 修改房号基础信息：房号 / 楼层 / 房型 / 备注。 */
+    @PutMapping("/{id}")
+    public Result<Room> update(@PathVariable Long id, @RequestBody Room room) {
+        return Result.ok(roomService.update(id, room));
+    }
+
     /** 切换可售状态：OPEN 打开 / CLOSED 关闭。 */
     @PutMapping("/{id}/rent-status")
     public Result<Room> changeRentStatus(@PathVariable Long id, @RequestBody Map<String, String> body) {

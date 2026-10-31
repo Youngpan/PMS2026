@@ -11,6 +11,8 @@ export const authApi = {
 export const roomApi = {
   page: (params: any) => request.get('/rooms', { params }),
   create: (data: any) => request.post('/rooms', data),
+  batchCreate: (data: any) => request.post('/rooms/batch', data),
+  update: (id: number, data: any) => request.put(`/rooms/${id}`, data),
   setRentStatus: (id: number, rent_status: string) =>
     request.put(`/rooms/${id}/rent-status`, { rent_status }),
   setCleanStatus: (id: number, clean_status: string) =>
@@ -21,6 +23,7 @@ export const roomApi = {
     request.get('/rooms/vacant', { params: { room_type_id } }),
   types: () => request.get('/room-types'),
   createType: (data: any) => request.post('/room-types', data),
+  updateType: (id: number, data: any) => request.put(`/room-types/${id}`, data),
 }
 
 // ---------- 渠道来源 ----------

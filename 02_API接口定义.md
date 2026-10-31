@@ -46,16 +46,36 @@
 - 入参：`{ "code":"", "name":"", "max_occupancy":2, "bed_type":"", "area":0, "base_rate":0, "rack_rate":0 }`
 
 ### PUT /room-types/{id}
-修改房型。
+修改房型，入参同创建（仅传需要改的字段即可）。基础价变更会向 OTA 渠道推送 `RATE_CHANGED` 事件。
 
 ### GET /rooms
-房号列表，支持筛选 `?status=VC&room_type_id=`。
+房号列表，分页 + 筛选：`?page=1&page_size=20&rent_status=OPEN&clean_status=CLEAN&room_type_id=1`。
+返回 `{ list, total, page, pageSize }`，排序按楼层、房号升序。
 
 ### POST /rooms
-创建房号：`{ "room_type_id":1, "number":"101", "floor":1 }`
+创建房号：`{ "room_type_id":1, "number":"101", "floor":1, "remark":"" }`
+- 房号在本酒店内唯一，重复返回 `409`。
+- 房型必须存在，否则返回 `400`。
 
-### PUT /rooms/{id}/status
-切换房态：`{ "status":"VC|VD|OCC|OOO|BLOCK", "remark":"" }`
+### POST /rooms/batch
+批量创建房号（一次录入整层）。
+- 入参：`{ "room_type_id":1, "floor":3, "numbers":["301","302"], "remark":"" }`
+- 整批校验：房号非空、批内不重复、库内不重复；任一不满足则整批不写入（`409` 带重复房号列表）。
+- `floor` 可省略，省略时按房号推断（`301` → 3，`1208` → 12）。
+
+### PUT /rooms/{id}
+修改房号基础信息：`{ "number":"301A", "floor":3, "room_type_id":1, "remark":"" }`
+- 只更新传入的字段；改房号同样做唯一性校验（`409`）。
+- 房态变更请用下面的 rent-status / clean-status 接口。
+
+### PUT /rooms/{id}/rent-status
+可售状态：`{ "rent_status":"OPEN|CLOSED|ASSIGNED" }`（打开 / 关闭 / 已排房在住）。
+
+### PUT /rooms/{id}/clean-status
+卫生状态：`{ "clean_status":"CLEAN|DIRTY" }`（净房 / 脏房）。
+
+### GET /rooms/vacant?room_type_id=
+可选房房号（打开 + 净房），供办理入住选房。
 
 ---
 

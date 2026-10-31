@@ -7,6 +7,7 @@
         <el-menu-item index="/reservations"><el-icon><Calendar /></el-icon><span>预订管理</span></el-menu-item>
         <el-menu-item index="/stays"><el-icon><House /></el-icon><span>在住看板</span></el-menu-item>
         <el-menu-item index="/housekeeping"><el-icon><Brush /></el-icon><span>房态看板</span></el-menu-item>
+        <el-menu-item index="/rooms"><el-icon><Grid /></el-icon><span>房型与房号</span></el-menu-item>
         <el-menu-item index="/reports"><el-icon><DataAnalysis /></el-icon><span>夜审与报表</span></el-menu-item>
         <el-menu-item index="/system/staff"><el-icon><User /></el-icon><span>员工管理</span></el-menu-item>
       </el-menu>
@@ -32,7 +33,7 @@
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { authApi } from '@/api/modules'
-import { Odometer, Calendar, House, Brush, DataAnalysis, User } from '@element-plus/icons-vue'
+import { Odometer, Calendar, House, Brush, Grid, DataAnalysis, User } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
