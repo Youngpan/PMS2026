@@ -25,10 +25,14 @@
         </thead>
         <tbody>
           <tr v-for="r in board.rooms" :key="r.id">
-            <td class="room-head">
+            <td class="room-head" title="点击查看房务（派单/报修）" @click.stop="openRoomPanel(r)">
               <div style="font-weight:700">{{ r.number }}</div>
               <div style="font-size:11px; color:#888">{{ roomTypeName(r.roomTypeId) }}</div>
-              <div class="dot" :class="'c-' + (r.rentStatus === 'CLOSED' ? 'closed' : r.cleanStatus === 'DIRTY' ? 'dirty' : 'clean')"></div>
+              <div class="rh-badges">
+                <span class="dot" :class="'c-' + (r.rentStatus === 'CLOSED' ? 'closed' : r.cleanStatus === 'DIRTY' ? 'dirty' : 'clean')"></span>
+                <span v-if="pendingTasks[r.id]" class="badge badge-clean">待清扫</span>
+                <span v-if="openFixes[r.id]" class="badge badge-fix">维修</span>
+              </div>
             </td>
             <td v-for="d in board.dates" :key="r.id + ':' + d"
                 class="cell" :class="cellClass(r, d)"
@@ -176,13 +180,96 @@
         <el-button type="primary" :loading="saving" @click="submitExtend">确认续住</el-button>
       </template>
     </el-dialog>
+    <!-- 房务面板：点房号打开 -->
+    <el-dialog v-model="panelVisible" :title="panelTitle" width="470px">
+      <template v-if="panelRoom">
+        <el-descriptions :column="2" border size="small">
+          <el-descriptions-item label="房型">{{ roomTypeName(panelRoom.roomTypeId) }}</el-descriptions-item>
+          <el-descriptions-item label="楼层">{{ panelRoom.floor ?? '—' }}</el-descriptions-item>
+          <el-descriptions-item label="可售状态">
+            <el-tag size="small" :type="panelRoom.rentStatus === 'OPEN' ? 'success' : panelRoom.rentStatus === 'ASSIGNED' ? 'warning' : 'info'">
+              {{ rentText(panelRoom.rentStatus) }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="卫生状态">
+            <el-tag size="small" effect="plain" :type="panelRoom.cleanStatus === 'CLEAN' ? 'success' : 'warning'">
+              {{ panelRoom.cleanStatus === 'CLEAN' ? '净房' : '脏房' }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="备注" :span="2">{{ panelRoom.remark || '—' }}</el-descriptions-item>
+        </el-descriptions>
+
+        <div class="panel-block">
+          <div class="panel-block-title">清扫任务</div>
+          <template v-if="panelTask">
+            <div class="panel-line">
+              {{ taskTypeText(panelTask.type) }} · 派单于 {{ fmtTime(panelTask.createdAt) }}
+            </div>
+            <el-button size="small" type="success" @click="doFinishTask">完成清扫（转净房）</el-button>
+          </template>
+          <div v-else class="panel-muted">无进行中任务</div>
+        </div>
+
+        <div class="panel-block">
+          <div class="panel-block-title">维修单</div>
+          <template v-if="panelFix">
+            <div class="panel-line">{{ panelFix.issue }} · 报修于 {{ fmtTime(panelFix.createdAt) }}</div>
+            <el-button size="small" type="success" @click="doFixMaintenance">修复（恢复可售）</el-button>
+          </template>
+          <div v-else class="panel-muted">无未完成报修</div>
+        </div>
+
+        <div class="panel-actions">
+          <el-button type="primary" :disabled="!!panelTask" @click="openTaskDialog">派清扫单</el-button>
+          <el-button type="danger" :disabled="!!panelFix" @click="openRepairDialog">报修</el-button>
+        </div>
+      </template>
+    </el-dialog>
+
+    <!-- 派清扫单 -->
+    <el-dialog v-model="taskVisible" title="派清扫单" width="440px">
+      <el-form label-width="80px">
+        <el-form-item label="房号"><el-tag>{{ panelRoom?.number }}</el-tag></el-form-item>
+        <el-form-item label="清扫类型">
+          <el-radio-group v-model="taskForm.type">
+            <el-radio-button value="DAILY">日常清扫</el-radio-button>
+            <el-radio-button value="CHECKOUT_CLEAN">退房清扫</el-radio-button>
+            <el-radio-button value="DEEP_CLEAN">深度清洁</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="指派给">
+          <el-select v-model="taskForm.assigneeId" clearable placeholder="不指派" style="width:100%">
+            <el-option v-for="s in staffList" :key="s.id" :label="s.realName || s.username" :value="s.id" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="taskVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="submitTask">派单</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 报修 -->
+    <el-dialog v-model="repairVisible" title="报修" width="440px">
+      <el-form label-width="80px">
+        <el-form-item label="房号"><el-tag>{{ panelRoom?.number }}</el-tag></el-form-item>
+        <el-form-item label="故障描述">
+          <el-input v-model="repairForm.issue" type="textarea" :rows="3" placeholder="如：空调不制冷、马桶漏水" />
+        </el-form-item>
+      </el-form>
+      <div class="tip-line">报修后该房置为「关闭」不可售，修复后自动恢复可售。</div>
+      <template #footer>
+        <el-button @click="repairVisible = false">取消</el-button>
+        <el-button type="danger" :loading="saving" @click="submitRepair">提交报修</el-button>
+      </template>
+    </el-dialog>
   </el-card>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { housekeepingApi, roomApi, stayApi, reservationApi } from '@/api/modules'
+import { housekeepingApi, roomApi, stayApi, reservationApi, systemApi } from '@/api/modules'
 import ReservationCreateDialog from '@/components/ReservationCreateDialog.vue'
 
 const todayStr = new Date().toISOString().slice(0, 10)
@@ -236,6 +323,112 @@ async function load() {
   board.cells = b.cells || {}
   const types: any[] = await roomApi.types()
   roomTypeMap.value = Object.fromEntries(types.map(t => [t.id, t]))
+  await loadDuty()
+}
+
+// ---- 房务：清扫任务 / 维修单 ----
+const pendingTasks = ref<Record<number, any>>({})
+const openFixes = ref<Record<number, any>>({})
+
+async function loadDuty() {
+  const [tasks, fixes] = await Promise.all([
+    housekeepingApi.tasks({ status: 'PENDING' }),
+    housekeepingApi.maintenances({ status: 'OPEN' }),
+  ])
+  pendingTasks.value = Object.fromEntries((tasks as any[]).map((t) => [t.roomId, t]))
+  openFixes.value = Object.fromEntries((fixes as any[]).map((m) => [m.roomId, m]))
+}
+
+const panelVisible = ref(false)
+const panelRoom = ref<any>(null)
+const panelTask = computed(() => (panelRoom.value ? pendingTasks.value[panelRoom.value.id] : null))
+const panelFix = computed(() => (panelRoom.value ? openFixes.value[panelRoom.value.id] : null))
+const panelTitle = computed(() =>
+  panelRoom.value ? `房号 ${panelRoom.value.number} · ${roomTypeName(panelRoom.value.roomTypeId)}` : '',
+)
+
+const staffList = ref<any[]>([])
+const taskVisible = ref(false)
+const taskForm = reactive({ type: 'DAILY', assigneeId: undefined as number | undefined })
+const repairVisible = ref(false)
+const repairForm = reactive({ issue: '' })
+
+function openRoomPanel(r: any) {
+  cancelRange()
+  panelRoom.value = r
+  panelVisible.value = true
+}
+
+/** 刷新看板与房务数据，并保持面板指向最新的房间对象。 */
+async function refreshAll() {
+  const roomId = panelRoom.value?.id
+  await load()
+  if (roomId) panelRoom.value = board.rooms.find((x: any) => x.id === roomId) || null
+}
+
+function taskTypeText(t: string) {
+  return { DAILY: '日常清扫', CHECKOUT_CLEAN: '退房清扫', DEEP_CLEAN: '深度清洁' }[t] || t
+}
+function rentText(s: string) {
+  return { OPEN: '打开', CLOSED: '关闭', ASSIGNED: '已排房' }[s] || s
+}
+function fmtTime(s: string) {
+  return s ? String(s).replace('T', ' ').slice(0, 16) : '—'
+}
+
+async function openTaskDialog() {
+  if (!staffList.value.length) {
+    try { staffList.value = (await systemApi.staff()) as any[] } catch {}
+  }
+  taskForm.type = panelRoom.value?.cleanStatus === 'DIRTY' ? 'CHECKOUT_CLEAN' : 'DAILY'
+  taskForm.assigneeId = undefined
+  taskVisible.value = true
+}
+
+async function submitTask() {
+  if (!panelRoom.value) return
+  saving.value = true
+  try {
+    await housekeepingApi.createTask({
+      room_id: panelRoom.value.id,
+      type: taskForm.type,
+      assignee_id: taskForm.assigneeId ?? null,
+    })
+    ElMessage.success('已派单')
+    taskVisible.value = false
+    await refreshAll()
+  } finally { saving.value = false }
+}
+
+async function doFinishTask() {
+  if (!panelTask.value) return
+  await housekeepingApi.finishTask(panelTask.value.id)
+  ElMessage.success('已完成清扫，房间转净房')
+  await refreshAll()
+}
+
+function openRepairDialog() {
+  repairForm.issue = ''
+  repairVisible.value = true
+}
+
+async function submitRepair() {
+  if (!panelRoom.value) return
+  if (!repairForm.issue.trim()) { ElMessage.warning('请填写故障描述'); return }
+  saving.value = true
+  try {
+    await housekeepingApi.reportMaintenance({ room_id: panelRoom.value.id, issue: repairForm.issue.trim() })
+    ElMessage.success('已报修，房间已置为不可售')
+    repairVisible.value = false
+    await refreshAll()
+  } finally { saving.value = false }
+}
+
+async function doFixMaintenance() {
+  if (!panelFix.value) return
+  await housekeepingApi.fixMaintenance(panelFix.value.id)
+  ElMessage.success('已修复，房间恢复可售')
+  await refreshAll()
 }
 
 function shift(n: number) { from.value = addDays(from.value, n); to.value = addDays(to.value, n); load() }
@@ -581,6 +774,18 @@ onUnmounted(() => {
 .cal .cell:hover .more-btn { opacity: 1; }
 .cal .cell-closed .more-btn { color: #fff; opacity: .7; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-left: 4px; vertical-align: middle; }
+.rh-badges { display: flex; align-items: center; gap: 4px; margin-top: 2px; }
+.badge { font-size: 10px; line-height: 14px; padding: 0 4px; border-radius: 2px; color: #fff; }
+.badge-clean { background: #e6a23c; }
+.badge-fix { background: #f56c6c; }
+.room-head { cursor: pointer; }
+.room-head:hover { background: #ecf5ff; }
+.panel-block { margin-top: 14px; border-top: 1px dashed #ebeef5; padding-top: 10px; }
+.panel-block-title { font-weight: 600; font-size: 13px; margin-bottom: 6px; }
+.panel-line { font-size: 12px; color: #606266; margin-bottom: 8px; }
+.panel-muted { font-size: 12px; color: #c0c4cc; }
+.panel-actions { display: flex; gap: 10px; margin-top: 16px; }
+.tip-line { font-size: 12px; color: #e6a23c; margin-top: 4px; }
 .dot.c-clean { background: #67c23a; }
 .dot.c-dirty { background: #e6a23c; }
 .dot.c-closed { background: #909399; }

@@ -173,20 +173,36 @@
 ### GET /housekeeping/dashboard
 房态看板：按楼层聚合房态。
 
-### GET /housekeeping/tasks
-清扫任务列表 `?status=PENDING&assignee_id=`。
+### GET /housekeeping/calendar?from=&to=
+房态日历：列=房间，行=日期。返回 `{ rooms, dates, cells }`，`cells` 的 key 为 `"<roomId>:<date>"`，仅包含被在住 / 预订 / 封房覆盖的格子。
+
+### GET /housekeeping/tasks?status=PENDING&assignee_id=
+清扫任务列表，按创建时间升序。
 
 ### POST /housekeeping/tasks
-派单：`{ "room_id":101, "type":"CHECKOUT_CLEAN", "assignee_id":5 }`
+派单：`{ "room_id":1, "type":"DAILY|CHECKOUT_CLEAN|DEEP_CLEAN", "assignee_id":5 }`（`assignee_id` 可空）
+- 房号不存在 → `404`；类型非法 → `400`；同房已有 PENDING 任务 → `409`。
 
 ### PUT /housekeeping/tasks/{id}/finish
-完成清扫 → 房态置 VC。
+完成清扫：任务置 `DONE`；房间若为脏房则置净房（`CLEAN`）。非 PENDING → `409`。
 
-### POST /maintenance
-报修：`{ "room_id":101, "issue":"空调不制冷" }`
+### GET /housekeeping/maintenance?status=OPEN
+维修单列表，按报修时间倒序。
 
-### PUT /maintenance/{id}/fix
-修复 → 房态恢复。
+### POST /housekeeping/maintenance
+报修：`{ "room_id":1, "issue":"空调不制冷" }`
+- 报修后该房可售状态置 `CLOSED`（不可售）。
+- 内容为空 → `400`；同房已有 OPEN 维修单 → `409`。
+
+### PUT /housekeeping/maintenance/{id}/fix
+修复：维修单置 `FIXED`；房间若为 `CLOSED` 则恢复 `OPEN`（可售）。
+
+### POST /housekeeping/blocks
+按日期范围封房（不影响整房可售状态）：`{ "room_id":1, "start":"2026-11-01", "end":"2026-11-03", "reason":"维修" }`
+- 与该房已有 ACTIVE 封房重叠 → `409`。
+
+### PUT /housekeeping/blocks/{id}/release
+释放封房：置 `RELEASED`，对应日期恢复可售。
 
 ---
 

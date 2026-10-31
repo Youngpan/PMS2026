@@ -301,10 +301,25 @@ public class HousekeepingService {
 
     @Transactional
     public HousekeepingTask createTask(Long roomId, String type, Long assigneeId) {
+        Room r = roomMapper.selectById(roomId);
+        if (r == null) throw new BusinessException(404, "房号不存在");
+
+        String taskType = (type == null || type.isBlank()) ? "DAILY" : type.trim();
+        if (!List.of("DAILY", "CHECKOUT_CLEAN", "DEEP_CLEAN").contains(taskType)) {
+            throw BusinessException.of(400, "未知的清扫类型: " + taskType);
+        }
+        Long pending = taskMapper.selectCount(new LambdaQueryWrapper<HousekeepingTask>()
+                .eq(HousekeepingTask::getHotelId, hotelId)
+                .eq(HousekeepingTask::getRoomId, roomId)
+                .eq(HousekeepingTask::getStatus, "PENDING"));
+        if (pending != null && pending > 0) {
+            throw BusinessException.of(409, "该房间已有进行中的清扫任务");
+        }
+
         HousekeepingTask t = new HousekeepingTask();
         t.setHotelId(hotelId);
         t.setRoomId(roomId);
-        t.setType(type == null ? "DAILY" : type);
+        t.setType(taskType);
         t.setStatus("PENDING");
         t.setAssigneeId(assigneeId);
         t.setCreatedAt(LocalDateTime.now());
@@ -336,6 +351,16 @@ public class HousekeepingService {
     public Maintenance reportMaintenance(Long roomId, String issue) {
         Room r = roomMapper.selectById(roomId);
         if (r == null) throw new BusinessException(404, "房号不存在");
+        if (issue == null || issue.isBlank()) throw BusinessException.of(400, "请填写报修内容");
+
+        Long open = maintenanceMapper.selectCount(new LambdaQueryWrapper<Maintenance>()
+                .eq(Maintenance::getHotelId, hotelId)
+                .eq(Maintenance::getRoomId, roomId)
+                .eq(Maintenance::getStatus, "OPEN"));
+        if (open != null && open > 0) {
+            throw BusinessException.of(409, "该房间已有未完成的维修单");
+        }
+
         r.setRentStatus("CLOSED");
         roomMapper.updateById(r);
         publisher.publish(r);
@@ -343,7 +368,7 @@ public class HousekeepingService {
         Maintenance m = new Maintenance();
         m.setHotelId(hotelId);
         m.setRoomId(roomId);
-        m.setIssue(issue);
+        m.setIssue(issue.trim());
         m.setStatus("OPEN");
         m.setReporterId(currentOperator());
         m.setCreatedAt(LocalDateTime.now());
