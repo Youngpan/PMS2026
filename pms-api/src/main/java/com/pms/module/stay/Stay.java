@@ -1,8 +1,10 @@
 package com.pms.module.stay;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.fasterxml.jackson.annotation.JsonAlias;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -30,4 +32,8 @@ public class Stay {
     /** 钟点房时长（小时） */
     private Integer hours;
     private Long operatorId;
+
+    /** 非持久化字段：房间号，在 inHouse/front 查询时由 service 填充。 */
+    @TableField(exist = false)
+    private String roomNumber;
 }

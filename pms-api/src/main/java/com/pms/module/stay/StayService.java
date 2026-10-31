@@ -37,6 +37,7 @@ public class StayService {
     private final StayExtensionMapper stayExtensionMapper;
     private final RoomTransferMapper roomTransferMapper;
     private final RoomService roomService;
+    private final com.pms.module.room.RoomMapper roomMapper;
     private final ReservationMapper reservationMapper;
     private final ReservationRoomMapper reservationRoomMapper;
     private final FolioService folioService;
@@ -125,9 +126,17 @@ public class StayService {
     }
 
     public List<Stay> inHouse() {
-        return stayMapper.selectList(new LambdaQueryWrapper<Stay>()
+        List<Stay> stays = stayMapper.selectList(new LambdaQueryWrapper<Stay>()
                 .eq(Stay::getHotelId, hotelId)
                 .eq(Stay::getStatus, "IN"));
+        Map<Long, com.pms.module.room.Room> roomMap = roomMapper.selectList(new LambdaQueryWrapper<>())
+                .stream().collect(java.util.stream.Collectors.toMap(
+                        com.pms.module.room.Room::getId, r -> r, (a, b) -> a));
+        for (Stay s : stays) {
+            com.pms.module.room.Room r = roomMap.get(s.getRoomId());
+            if (r != null) s.setRoomNumber(r.getNumber());
+        }
+        return stays;
     }
 
     /**
