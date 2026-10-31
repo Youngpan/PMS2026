@@ -17,11 +17,12 @@
         <el-table-column prop="status" label="状态" width="110">
           <template #default="{ row }"><el-tag>{{ statusText(row.status) }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="操作" width="240">
+        <el-table-column label="操作" width="340">
           <template #default="{ row }">
             <el-button size="small" type="success" :disabled="row.status !== 'PENDING'" @click="confirm(row)">确认</el-button>
             <el-button size="small" type="warning" :disabled="row.status !== 'CONFIRMED'" @click="checkin(row)">入住</el-button>
-            <el-button size="small" type="danger" @click="cancel(row)">取消</el-button>
+            <el-button size="small" type="info" :disabled="row.status !== 'CHECKED_IN'" @click="undoCheckin(row)">撤销入住</el-button>
+            <el-button size="small" type="danger" :disabled="row.status === 'CHECKED_IN' || row.status === 'CHECKED_OUT'" @click="cancel(row)">取消</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -58,7 +59,7 @@ function onCreated() { page.value = 1; load() }
 
 async function confirm(row: any) {
   await reservationApi.confirm(row.id)
-  ElMessage.success('已确认')
+  ElMessage.success('已确认，转为待入住')
   load()
 }
 
@@ -86,8 +87,23 @@ async function checkin(row: any) {
     }).catch(() => {})
 }
 
+/** 撤销入住（已入住 → 待入住）：找到该预订对应的在住，回滚在住+账单，房态恢复净房，订单回待入住。 */
+async function undoCheckin(row: any) {
+  const stays: any[] = await stayApi.inHouse()
+  const stay = stays.find(s => s.reservationId === row.id)
+  if (!stay) { ElMessage.warning('未找到该订单的在住记录（可能已退房）'); return }
+  ElMessageBox.confirm(
+    '撤销入住将删除该在住及全部账单（含押金收款），房态恢复净房，订单回退为待入住。\n已有续住/换房的在住不可撤销，请改用退房。',
+    '撤销入住', { type: 'warning' }
+  ).then(async () => {
+    await stayApi.undoCheckin(stay.id)
+    ElMessage.success('已撤销入住，订单回到待入住')
+    load()
+  }).catch(() => {})
+}
+
 function statusText(s: string) {
-  return { PENDING: '待确认', CONFIRMED: '已确认', CHECKED_IN: '已入住', CHECKED_OUT: '已退房', CANCELLED: '已取消', NO_SHOW: '未到' }[s] || s
+  return { PENDING: '待确认', CONFIRMED: '待入住', CHECKED_IN: '已入住', CHECKED_OUT: '已退房', CANCELLED: '已取消', NO_SHOW: '未到' }[s] || s
 }
 
 onMounted(load)
