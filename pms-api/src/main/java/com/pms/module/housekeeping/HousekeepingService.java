@@ -11,6 +11,8 @@ import com.pms.module.reservation.ReservationRoomMapper;
 import com.pms.module.room.Room;
 import com.pms.module.room.RoomMapper;
 import com.pms.module.stay.Stay;
+import com.pms.module.stay.StayExtension;
+import com.pms.module.stay.StayExtensionMapper;
 import com.pms.module.stay.StayMapper;
 import com.pms.security.StaffContext;
 import com.pms.ws.RoomStatusPublisher;
@@ -40,6 +42,7 @@ public class HousekeepingService {
     private final RoomBlockMapper roomBlockMapper;
     private final RoomMapper roomMapper;
     private final StayMapper stayMapper;
+    private final StayExtensionMapper stayExtensionMapper;
     private final ReservationMapper reservationMapper;
     private final ReservationRoomMapper reservationRoomMapper;
     private final ChannelMapper channelMapper;
@@ -111,6 +114,18 @@ public class HousekeepingService {
             resById = reservations.stream().collect(Collectors.toMap(Reservation::getId, r -> r, (a, b) -> a));
         }
 
+        // 续住截止日：在住未退房时用于封顶日历覆盖（stayId → 最大 extendToDate）
+        Map<Long, LocalDate> stayExtendCo = Map.of();
+        if (!stays.isEmpty()) {
+            List<Long> stayIds = stays.stream().map(Stay::getId).toList();
+            stayExtendCo = stayExtensionMapper.selectList(new LambdaQueryWrapper<StayExtension>()
+                    .in(StayExtension::getStayId, stayIds))
+                    .stream().collect(Collectors.toMap(
+                            StayExtension::getStayId,
+                            StayExtension::getExtendToDate,
+                            (a, b) -> a.isBefore(b) ? b : a));
+        }
+
         // 线下散客(WALKIN) 渠道：钟点房等无 reservation 的 stay 默认归属
         Channel walkin = channelById.values().stream()
                 .filter(c -> "WALKIN".equals(c.getCode())).findFirst().orElse(null);
@@ -146,9 +161,20 @@ public class HousekeepingService {
                 stayChannel = cid == null ? null : channelById.get(cid);
             }
             List<RoomBlock> roomBlocks = blocksByRoom.get(r.getId());
+            // 在住覆盖区间按订单日期封顶（避免前溢/后溢到订单外日期）：
+            // 下界 plannedCi = 订单 checkInDate（含）；上界 plannedCo = 订单退房日与续住截止日取大（不含）
+            LocalDate stayCiBound = null;
+            LocalDate stayCoBound = null;
+            if (st != null && st.getReservationId() != null && resById.containsKey(st.getReservationId())) {
+                Reservation res = resById.get(st.getReservationId());
+                stayCiBound = res.getCheckInDate();
+                LocalDate ext = stayExtendCo.get(st.getId());
+                stayCoBound = ext != null ? (res.getCheckOutDate().isBefore(ext) ? ext : res.getCheckOutDate())
+                        : res.getCheckOutDate();
+            }
             for (String d : dates) {
                 LocalDate date = LocalDate.parse(d);
-                if (st != null && coversStay(st, date)) {
+                if (st != null && coversStay(st, date, stayCiBound, stayCoBound)) {
                     cells.put(r.getId() + ":" + d, cellOfStay(st, r.getId(), d, stayChannel));
                     continue;
                 }
@@ -181,15 +207,18 @@ public class HousekeepingService {
 
     /**
      * stay 覆盖某日：
-     * - IN（在住）：checkInDate ≤ date ≤ checkOutDate（含退房当日，钟点房 checkOut 同日也覆盖）。
-     * - OUT（已退房）：checkInDate ≤ date ＜ checkOutDate（不含退房当日——退房当天房间转脏房，
-     *   格子不再显示该宾客，由空格的脏房样式呈现）。
-     * 未退房则 checkOutDate 视为 +∞。
+     * - 有预订（plannedCi/plannedCoExclusive 非空）：覆盖区间按订单入住~退房日（含续住）封顶，
+     *   即 plannedCi ≤ date ＜ plannedCoExclusive，避免在住格前溢到入住日前或后溢到退房日后。
+     * - 无预订（钟点房等）：用实际 checkInAt/checkOutAt，IN 含退房当日、OUT 不含退房当日。
+     * 未退房（checkOutAt 为空）且无上界时只覆盖入住当日，不再视为 +∞。
      */
-    private boolean coversStay(Stay s, LocalDate date) {
-        LocalDate ci = s.getCheckInAt() == null ? null : s.getCheckInAt().toLocalDate();
+    private boolean coversStay(Stay s, LocalDate date, LocalDate plannedCi, LocalDate plannedCoExclusive) {
+        LocalDate ci = plannedCi != null ? plannedCi
+                : (s.getCheckInAt() == null ? null : s.getCheckInAt().toLocalDate());
         if (ci == null || date.isBefore(ci)) return false;
-        if (s.getCheckOutAt() == null) return true;
+        if (s.getCheckOutAt() == null) {
+            return plannedCoExclusive != null ? date.isBefore(plannedCoExclusive) : date.isEqual(ci);
+        }
         LocalDate co = s.getCheckOutAt().toLocalDate();
         if ("OUT".equals(s.getStatus())) return date.isBefore(co);
         return !date.isAfter(co);
