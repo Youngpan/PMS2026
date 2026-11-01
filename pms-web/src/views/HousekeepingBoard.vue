@@ -445,11 +445,16 @@ const rangeStart = ref<{ roomId: number; date: string } | null>(null)
 const rangeHover = ref<{ roomId: number; date: string } | null>(null)
 
 function inRange(r: any, d: string) {
+  // 浮层显示期间优先用 rangeSelected 保持高亮
+  if (rangePopVisible.value && rangeSelected.value && rangeSelected.value.room.id === r.id) {
+    const a = rangeSelected.value.start, b = rangeSelected.value.end
+    const lo = a < b ? a : b, hi = a < b ? b : a
+    return d >= lo && d < hi
+  }
   if (!rangeStart.value || rangeStart.value.roomId !== r.id) return false
   if (!rangeHover.value || rangeHover.value.roomId !== r.id) return d === rangeStart.value.date
   const a = rangeStart.value.date, b = rangeHover.value.date
   const lo = a < b ? a : b, hi = a < b ? b : a
-  // 范围高亮 = 入住日（含）到用户选中的最后一晚（含）→ 即全部间夜
   return d >= lo && d <= hi
 }
 function cellClass(r: any, d: string) {
