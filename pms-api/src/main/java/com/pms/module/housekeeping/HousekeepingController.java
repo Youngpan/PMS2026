@@ -25,7 +25,7 @@ public class HousekeepingController {
     public Result<HousekeepingService.CalendarBoard> calendar(
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to) {
-        LocalDate f = from == null ? LocalDate.now().minusDays(1) : LocalDate.parse(from);
+        LocalDate f = from == null ? LocalDate.now() : LocalDate.parse(from);
         LocalDate t = to == null ? LocalDate.now().plusDays(20) : LocalDate.parse(to);
         return Result.ok(housekeepingService.calendar(f, t));
     }
