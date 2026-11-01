@@ -500,34 +500,21 @@ function onCellHover(r: any, d: string) {
 function openRangeAction(start: string, end: string, r: any) {
   rangeSelected.value = { room: r, start, end }
   rangePopVisible.value = true
-  // 自动滚动日历使结束日期列居中，并把浮层定位在最后选中格子上方
+  // 最后一晚 = end - 1（end 是离店日）
+  const lastNight = addDays(end, -1)
   nextTick(() => {
-    const wrap = document.querySelector('.cal-wrap')
+    const cellEl = document.querySelector('.cell[data-key="' + r.id + ':' + lastNight + '"]') as HTMLElement | null
+    if (!cellEl) return
+    const wrap = document.querySelector('.cal-wrap') as HTMLElement
     if (!wrap) return
-    // 最后一晚日期 = end - 1（end 是离店日）
-    const lastNight = addDays(end, -1)
-    const cellEl = wrap.querySelector('.cell[data-key="' + r.id + ':' + lastNight + '"]') as HTMLElement | null
-    // 先滚动表头列居中（保持滚动体验）
-    const headers = wrap.querySelectorAll('.cal thead .date-head')
-    const endParts = lastNight.slice(5)
-    for (const th of headers) {
-      const mdEl = th.querySelector('.md')
-      if (mdEl && mdEl.textContent === endParts) {
-        const rect = th.getBoundingClientRect()
-        const wrapRect = wrap.getBoundingClientRect()
-        const targetScroll = wrap.scrollLeft + (rect.left - wrapRect.left) - (wrapRect.width / 2 - rect.width / 2)
-        wrap.scrollTo({ left: Math.max(0, targetScroll), behavior: 'smooth' })
-        break
-      }
-    }
-    // 浮层定位在该格子上方（滚动后再读一次 rect，因为滚动会移动元素位置）
-    if (cellEl) {
-      setTimeout(() => {
-        const cr = cellEl.getBoundingClientRect()
-        rangePopPos.x = cr.left + cr.width / 2 - 80
-        rangePopPos.y = Math.max(cr.top - 80, 10)
-      }, 350) // 等平滑滚动完成
-    }
+    // 用格子自己的位置来计算：让该格子居于日历可视区中央
+    const wrapRect = wrap.getBoundingClientRect()
+    const cellRect = cellEl.getBoundingClientRect()
+    const targetScroll = wrap.scrollLeft + (cellRect.left - wrapRect.left) - (wrapRect.width / 2 - cellRect.width / 2)
+    wrap.scrollTo({ left: Math.max(0, targetScroll), behavior: 'smooth' })
+    // 浮层定位在格子上方（用视口坐标，因为浮层是 fixed/teleport 到 body）
+    rangePopPos.x = cellRect.left + cellRect.width / 2 - 80
+    rangePopPos.y = Math.max(cellRect.top - 80, 10)
   })
 }
 function rangeNights() {
