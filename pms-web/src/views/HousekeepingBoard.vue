@@ -498,8 +498,8 @@ function onCellHover(r: any, d: string) {
 }
 function openRangeAction(start: string, end: string, r: any) {
   rangeSelected.value = { room: r, start, end }
-  rangePopPos.x = (window.event as any)?.clientX ?? 0
-  rangePopPos.y = ((window.event as any)?.clientY ?? 0) - 70
+  rangePopPos.x = Math.min(Math.max((window.event as any)?.clientX ?? 400, 160), window.innerWidth - 260)
+  rangePopPos.y = Math.max(((window.event as any)?.clientY ?? 300) - 90, 10)
   rangePopVisible.value = true
 }
 function rangeNights() {
