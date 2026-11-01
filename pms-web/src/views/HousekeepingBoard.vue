@@ -771,7 +771,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.cal-wrap { overflow: auto; max-height: 70vh; border: 1px solid #ebeef5; }
+.cal-wrap { overflow: auto; max-height: 70vh; border: 1px solid #ebeef5; position: relative; }
 .cal { border-collapse: collapse; font-size: 12px; }
 .cal th, .cal td { border: 1px solid #ebeef5; padding: 4px; }
 .cal thead th { position: sticky; top: 0; z-index: 2; background: #f5f7fa; }
