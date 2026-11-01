@@ -448,7 +448,8 @@ function inRange(r: any, d: string) {
   if (!rangeHover.value || rangeHover.value.roomId !== r.id) return d === rangeStart.value.date
   const a = rangeStart.value.date, b = rangeHover.value.date
   const lo = a < b ? a : b, hi = a < b ? b : a
-  return d >= lo && d <= hi
+  // 范围高亮 = 入住日（含）到离店日前一天 → 即间夜
+  return d >= lo && d < hi
 }
 function cellClass(r: any, d: string) {
   const c = cellOf(r, d)
