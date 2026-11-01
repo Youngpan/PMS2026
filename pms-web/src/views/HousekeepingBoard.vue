@@ -472,6 +472,8 @@ function cellClass(r: any, d: string) {
 function onCellClick(r: any, d: string) {
   const c = cellOf(r, d)
   if (c) { openCell(r, d); return }            // occupied → 操作弹窗
+  // 空格：浮层已显示 → 取消当前范围并重新开始
+  if (rangePopVisible.value) { cancelRange() }
   // 空格（含已关闭房）→ 范围选房，左键点选出现蓝色选中样式
   if (!rangeStart.value) {
     rangeStart.value = { roomId: r.id, date: d }
