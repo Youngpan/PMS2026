@@ -129,9 +129,7 @@
       <div v-if="rangePopVisible" class="range-pop" :style="{ left: rangePopPos.x + 'px', top: rangePopPos.y + 'px' }">
         <div class="rp-header">
           <strong>{{ rangeSelected?.room.number }}</strong>
-          <span>{{ rangeSelected?.start }}</span>
-          <span v-if="rangeNights() > 0"> → {{ rangeEndDisplay() }}</span>
-          <span v-if="rangeNights() >= 1" class="rp-nights">{{ rangeNights() }} 晚</span>
+          <span>已选中 {{ rangeNights() }} 晚</span>
         </div>
         <div class="rp-actions">
           <el-button size="small" type="primary" @click="rangeCreateOrder">录入订单</el-button>
@@ -566,13 +564,6 @@ function rangeRemark() {
 }
 function cancelRange() {
   rangeStart.value = null; rangeHover.value = null; rangePopVisible.value = false
-}
-function rangeEndDisplay() {
-  if (!rangeSelected.value) return ''
-  if (rangeNights() < 1) return rangeSelected.value.start + '（当日）'
-  const d = new Date(rangeSelected.value.start)
-  d.setDate(d.getDate() + 1)
-  return rangeSelected.value.start + ' → ' + addDays(rangeSelected.value.start, rangeNights())
 }
 
 function openCell(r: any, d: string) {
