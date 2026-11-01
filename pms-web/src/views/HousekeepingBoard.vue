@@ -275,7 +275,7 @@ import ReservationCreateDialog from '@/components/ReservationCreateDialog.vue'
 
 const todayStr = new Date().toISOString().slice(0, 10)
 const from = ref(todayStr)
-const to = ref(addDays(todayStr, 50))
+const to = ref(addDays(todayStr, 20))
 
 const board = reactive<{ rooms: any[]; dates: string[]; cells: Record<string, any> }>({
   rooms: [], dates: [], cells: {},
@@ -434,7 +434,7 @@ async function doFixMaintenance() {
 }
 
 function shift(n: number) { from.value = addDays(from.value, n); to.value = addDays(to.value, n); load() }
-function resetRange() { from.value = todayStr; to.value = addDays(todayStr, 50); load() }
+function resetRange() { from.value = todayStr; to.value = addDays(todayStr, 20); load() }
 
 function cellKey(roomId: number, date: string) { return roomId + ':' + date }
 function cellOf(r: any, d: string) { return board.cells[cellKey(r.id, d)] }
@@ -499,23 +499,32 @@ function onCellHover(r: any, d: string) {
 }
 function openRangeAction(start: string, end: string, r: any) {
   rangeSelected.value = { room: r, start, end }
-  rangePopVisible.value = true
-  // 最后一晚 = end - 1（end 是离店日）
+  // 如果 end 接近 to 边界（<=3 天），自动扩展再加载 30 天
   const lastNight = addDays(end, -1)
-  nextTick(() => {
-    const cellEl = document.querySelector('.cell[data-key="' + r.id + ':' + lastNight + '"]') as HTMLElement | null
-    if (!cellEl) return
-    const wrap = document.querySelector('.cal-wrap') as HTMLElement
-    if (!wrap) return
-    // 用格子自己的位置来计算：让该格子居于日历可视区中央
-    const wrapRect = wrap.getBoundingClientRect()
-    const cellRect = cellEl.getBoundingClientRect()
-    const targetScroll = wrap.scrollLeft + (cellRect.left - wrapRect.left) - (wrapRect.width / 2 - cellRect.width / 2)
-    wrap.scrollTo({ left: Math.max(0, targetScroll), behavior: 'smooth' })
-    // 浮层定位在格子上方（用视口坐标，因为浮层是 fixed/teleport 到 body）
-    rangePopPos.x = cellRect.left + cellRect.width / 2 - 80
-    rangePopPos.y = Math.max(cellRect.top - 80, 10)
-  })
+  const gap = (new Date(lastNight).getTime() - new Date(to.value).getTime()) / 86400000
+  if (gap >= -3) {
+    to.value = addDays(to.value, 30)
+    // 扩展后重新加载，加载完后定位浮层
+    load().then(() => {
+      showRangePopup(r, lastNight)
+    })
+  } else {
+    rangePopVisible.value = true
+    nextTick(() => showRangePopup(r, lastNight))
+  }
+}
+function showRangePopup(r: any, lastNight: string) {
+  const cellEl = document.querySelector('.cell[data-key="' + r.id + ':' + lastNight + '"]') as HTMLElement | null
+  if (!cellEl) return
+  const wrap = document.querySelector('.cal-wrap') as HTMLElement
+  if (!wrap) return
+  const wrapRect = wrap.getBoundingClientRect()
+  const cellRect = cellEl.getBoundingClientRect()
+  const targetScroll = wrap.scrollLeft + (cellRect.left - wrapRect.left) - (wrapRect.width / 2 - cellRect.width / 2)
+  wrap.scrollTo({ left: Math.max(0, targetScroll), behavior: 'smooth' })
+  rangePopPos.x = cellRect.left + cellRect.width / 2 - 80
+  rangePopPos.y = Math.max(cellRect.top - 80, 10)
+  rangePopVisible.value = true
 }
 function rangeNights() {
   const rs = rangeSelected.value
