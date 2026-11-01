@@ -274,7 +274,7 @@ import ReservationCreateDialog from '@/components/ReservationCreateDialog.vue'
 
 const todayStr = new Date().toISOString().slice(0, 10)
 const from = ref(todayStr)
-const to = ref(addDays(todayStr, 20))
+const to = ref(addDays(todayStr, 50))
 
 const board = reactive<{ rooms: any[]; dates: string[]; cells: Record<string, any> }>({
   rooms: [], dates: [], cells: {},
@@ -433,7 +433,7 @@ async function doFixMaintenance() {
 }
 
 function shift(n: number) { from.value = addDays(from.value, n); to.value = addDays(to.value, n); load() }
-function resetRange() { from.value = todayStr; to.value = addDays(todayStr, 20); load() }
+function resetRange() { from.value = todayStr; to.value = addDays(todayStr, 50); load() }
 
 function cellKey(roomId: number, date: string) { return roomId + ':' + date }
 function cellOf(r: any, d: string) { return board.cells[cellKey(r.id, d)] }
