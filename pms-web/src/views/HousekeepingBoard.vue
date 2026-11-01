@@ -54,6 +54,19 @@
           </tr>
         </tbody>
       </table>
+      <!-- 范围选房浮层（absolute 定位，跟随日历滚动） -->
+      <div v-if="rangePopVisible" class="range-pop" :style="{ left: rangePopPos.x + 'px', top: rangePopPos.y + 'px' }">
+        <div class="rp-header">
+          <strong>{{ rangeSelected?.room.number }}</strong>
+          <span>已选中 {{ rangeNights() }} 晚</span>
+        </div>
+        <div class="rp-actions">
+          <el-button size="small" type="primary" @click="rangeCreateOrder">录入订单</el-button>
+          <el-button size="small" @click="rangeRemark">备注</el-button>
+          <el-button v-if="rangeSelected?.room.rentStatus === 'CLOSED'" size="small" type="warning" @click="rangeCloseRoom">打开</el-button>
+          <el-button v-else size="small" type="danger" @click="rangeCloseRoom">关房</el-button>
+        </div>
+      </div>
     </div>
 
     <div class="legend">
@@ -124,22 +137,6 @@
 
     <!-- 录入订单 -->
     <ReservationCreateDialog v-model="createVisible" :prefill="createPrefill" @success="onOrderCreated" />
-
-    <!-- 范围选房后操作选择器（悬浮浮层） -->
-    <teleport to="body">
-      <div v-if="rangePopVisible" class="range-pop" :style="{ left: rangePopPos.x + 'px', top: rangePopPos.y + 'px' }">
-        <div class="rp-header">
-          <strong>{{ rangeSelected?.room.number }}</strong>
-          <span>已选中 {{ rangeNights() }} 晚</span>
-        </div>
-        <div class="rp-actions">
-          <el-button size="small" type="primary" @click="rangeCreateOrder">录入订单</el-button>
-          <el-button size="small" @click="rangeRemark">备注</el-button>
-          <el-button v-if="rangeSelected?.room.rentStatus === 'CLOSED'" size="small" type="warning" @click="rangeCloseRoom">打开</el-button>
-          <el-button v-else size="small" type="danger" @click="rangeCloseRoom">关房</el-button>
-        </div>
-      </div>
-    </teleport>
 
     <!-- 钟点房 -->
     <el-dialog v-model="hourlyVisible" title="钟点房" width="420px">
@@ -518,12 +515,14 @@ function showRangePopup(r: any, lastNight: string) {
   if (!cellEl) return
   const wrap = document.querySelector('.cal-wrap') as HTMLElement
   if (!wrap) return
+  // 用视口坐标计算滚动目标：让该格子居于日历可视区中央
   const wrapRect = wrap.getBoundingClientRect()
   const cellRect = cellEl.getBoundingClientRect()
   const targetScroll = wrap.scrollLeft + (cellRect.left - wrapRect.left) - (wrapRect.width / 2 - cellRect.width / 2)
   wrap.scrollTo({ left: Math.max(0, targetScroll), behavior: 'smooth' })
-  rangePopPos.x = cellRect.left + cellRect.width / 2 - 80
-  rangePopPos.y = Math.max(cellRect.top - 80, 10)
+  // 浮层定位用格子相对 cal-wrap 的偏移（absolute，滚动后跟随）
+  rangePopPos.x = cellEl.offsetLeft + cellEl.offsetWidth / 2 - 80
+  rangePopPos.y = Math.max(cellEl.offsetTop - 80, 10)
   rangePopVisible.value = true
 }
 function rangeNights() {
@@ -836,9 +835,10 @@ onUnmounted(() => {
 .lg.cell-closed::after { content:''; position:absolute; inset:0; background: linear-gradient(to top right, transparent calc(50% - 1px), #c0c4cc 50%, transparent calc(50% + 1px)); }
 
 /* 范围选房悬浮浮层 */
-:global(.range-pop) {
-  position: fixed;
-  z-index: 9999;
+/* 范围选房浮层（absolute 跟随日历滚动） */
+.range-pop {
+  position: absolute;
+  z-index: 100;
   background: #fff;
   border: 1px solid #dcdfe6;
   border-radius: 8px;
