@@ -513,9 +513,9 @@ function openRangeAction(start: string, end: string, r: any) {
         // 滚动使该列居中
         const targetScroll = wrap.scrollLeft + (rect.left - wrapRect.left) - (wrapRect.width / 2 - rect.width / 2)
         wrap.scrollTo({ left: Math.max(0, targetScroll), behavior: 'smooth' })
-        // 浮层定位在该列下方
-        rangePopPos.x = wrapRect.left + wrapRect.width / 2 - 80
-        rangePopPos.y = wrapRect.bottom - 60
+        // 浮层定位在该列上方
+        rangePopPos.x = rect.left + rect.width / 2 - 80
+        rangePopPos.y = rect.top - 80
         break
       }
     }
