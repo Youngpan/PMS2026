@@ -12,7 +12,7 @@
       </div>
     </template>
 
-    <div class="cal-wrap">
+    <div class="cal-wrap" @click.self="cancelRange">
       <table class="cal">
         <thead>
           <tr>
@@ -124,21 +124,23 @@
     <!-- 录入订单 -->
     <ReservationCreateDialog v-model="createVisible" :prefill="createPrefill" @success="onOrderCreated" />
 
-    <!-- 范围选房后操作选择器 -->
-    <el-dialog v-model="rangeActionVisible"
-               :title="rangeSelected ? `房号 ${rangeSelected.room.number} · ${rangeSelected.start} → ${rangeSelected.end}` : ''"
-               width="360px">
-      <div v-if="rangeSelected" style="display:flex; flex-direction:column; gap:10px">
-        <div v-if="rangeNights() < 1" class="range-tip">
-          已选择同日（{{ rangeSelected.start }}）：入住日期为当天，离店默认次日（可在弹窗修改）。
+    <!-- 范围选房后操作选择器（悬浮浮层） -->
+    <teleport to="body">
+      <div v-if="rangePopVisible" class="range-pop" :style="{ left: rangePopPos.x + 'px', top: rangePopPos.y + 'px' }">
+        <div class="rp-header">
+          <strong>{{ rangeSelected?.room.number }}</strong>
+          <span>{{ rangeSelected?.start }}</span>
+          <span v-if="rangeNights() > 0"> → {{ rangeEndDisplay() }}</span>
+          <span v-if="rangeNights() >= 1" class="rp-nights">{{ rangeNights() }} 晚</span>
         </div>
-        <el-button type="primary" @click="rangeCreateOrder">
-          录入订单（{{ rangeNights() < 1 ? '当天入住' : rangeNights() + ' 晚' }}）
-        </el-button>
-        <el-button @click="rangeRemark">备注{{ rangeSelected.room.remark ? '（已有）' : '' }}</el-button>
-        <el-button :type="rangeSelected.room.rentStatus === 'CLOSED' ? 'warning' : 'danger'" @click="rangeCloseRoom">{{ rangeSelected.room.rentStatus === 'CLOSED' ? '打开房间' : '关闭房间' }}</el-button>
+        <div class="rp-actions">
+          <el-button size="small" type="primary" @click="rangeCreateOrder">录入订单</el-button>
+          <el-button size="small" @click="rangeRemark">备注</el-button>
+          <el-button v-if="rangeSelected?.room.rentStatus === 'CLOSED'" size="small" type="warning" @click="rangeCloseRoom">打开</el-button>
+          <el-button v-else size="small" type="danger" @click="rangeCloseRoom">关房</el-button>
+        </div>
       </div>
-    </el-dialog>
+    </teleport>
 
     <!-- 钟点房 -->
     <el-dialog v-model="hourlyVisible" title="钟点房" width="420px">
@@ -289,9 +291,10 @@ const saving = ref(false)
 const createVisible = ref(false)
 const createPrefill = ref<any>({})
 
-// 范围选房后的操作选择器
+// 范围选房后的操作选择器（悬浮浮层）
 const rangeSelected = ref<{ room: any; start: string; end: string } | null>(null)
-const rangeActionVisible = ref(false)
+const rangePopVisible = ref(false)
+const rangePopPos = reactive({ x: 0, y: 0 })
 
 // 钟点房
 const hourlyVisible = ref(false)
@@ -490,7 +493,9 @@ function onCellHover(r: any, d: string) {
 }
 function openRangeAction(start: string, end: string, r: any) {
   rangeSelected.value = { room: r, start, end }
-  rangeActionVisible.value = true
+  rangePopPos.x = (window.event as any)?.clientX ?? 0
+  rangePopPos.y = ((window.event as any)?.clientY ?? 0) - 70
+  rangePopVisible.value = true
 }
 function rangeNights() {
   const rs = rangeSelected.value
@@ -500,7 +505,7 @@ function rangeNights() {
 }
 function rangeCreateOrder() {
   const rs = rangeSelected.value!
-  rangeActionVisible.value = false
+  rangePopVisible.value = false
   const single = rs.start === rs.end
   createPrefill.value = {
     checkInDate: rs.start,
@@ -515,7 +520,7 @@ function rangeCreateOrder() {
 /** 关闭/打开房间：已关闭房 → 整房打开(rent_status=OPEN)；打开房 → 按选中日期范围封房。 */
 function rangeCloseRoom() {
   const rs = rangeSelected.value!
-  rangeActionVisible.value = false
+  rangePopVisible.value = false
   if (rs.room.rentStatus === 'CLOSED') {
     roomApi.setRentStatus(rs.room.id, 'OPEN').then(() => {
       ElMessage.success('已打开房间')
@@ -551,7 +556,7 @@ function onReleaseBlock() {
 }
 function rangeRemark() {
   const r = rangeSelected.value!.room
-  rangeActionVisible.value = false
+  rangePopVisible.value = false
   ElMessageBox.prompt('房间备注', '备注', { inputValue: r.remark || '' })
     .then(async ({ value }) => {
       await roomApi.setRemark(r.id, value)
@@ -559,7 +564,16 @@ function rangeRemark() {
       load()
     }).catch(() => {})
 }
-function cancelRange() { rangeStart.value = null; rangeHover.value = null }
+function cancelRange() {
+  rangeStart.value = null; rangeHover.value = null; rangePopVisible.value = false
+}
+function rangeEndDisplay() {
+  if (!rangeSelected.value) return ''
+  if (rangeNights() < 1) return rangeSelected.value.start + '（当日）'
+  const d = new Date(rangeSelected.value.start)
+  d.setDate(d.getDate() + 1)
+  return rangeSelected.value.start + ' → ' + addDays(rangeSelected.value.start, rangeNights())
+}
 
 function openCell(r: any, d: string) {
   cancelRange()
@@ -798,4 +812,22 @@ onUnmounted(() => {
 .lg.cell-dirty { background: #fdf6ec; }
 .lg.cell-closed { background: #909399; position: relative; }
 .lg.cell-closed::after { content:''; position:absolute; inset:0; background: linear-gradient(to top right, transparent calc(50% - 1px), #c0c4cc 50%, transparent calc(50% + 1px)); }
+
+/* 范围选房悬浮浮层 */
+:global(.range-pop) {
+  position: fixed;
+  z-index: 9999;
+  background: #fff;
+  border: 1px solid #dcdfe6;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.12);
+  padding: 8px 10px;
+  min-width: 160px;
+  pointer-events: auto;
+}
+.rp-header { font-size: 12px; color: #606266; margin-bottom: 6px; display: flex; align-items: center; gap: 4px; }
+.rp-header strong { color: #303133; }
+.rp-nights { font-size: 11px; color: #409eff; margin-left: auto; }
+.rp-actions { display: flex; gap: 4px; }
+.rp-actions .el-button { font-size: 12px; }
 </style>
