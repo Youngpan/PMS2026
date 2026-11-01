@@ -267,7 +267,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { housekeepingApi, roomApi, stayApi, reservationApi, systemApi } from '@/api/modules'
 import ReservationCreateDialog from '@/components/ReservationCreateDialog.vue'
@@ -501,6 +501,26 @@ function openRangeAction(start: string, end: string, r: any) {
   rangePopPos.x = Math.min(Math.max((window.event as any)?.clientX ?? 400, 160), window.innerWidth - 260)
   rangePopPos.y = Math.max(((window.event as any)?.clientY ?? 300) - 90, 10)
   rangePopVisible.value = true
+  // 自动滚动日历使结束日期列居中
+  nextTick(() => {
+    const wrap = document.querySelector('.cal-wrap')
+    if (!wrap) return
+    // 找到结束日期对应的表头列
+    const headers = wrap.querySelectorAll('.cal thead .date-head')
+    // end 是 checkout 日（如 11-04），对应的表头标记是 md(d) = "11-04"
+    const endParts = addDays(end, -1).slice(5) // "11-03"（最后一晚）
+    for (const th of headers) {
+      const mdEl = th.querySelector('.md')
+      if (mdEl && mdEl.textContent === endParts) {
+        const rect = th.getBoundingClientRect()
+        const wrapRect = wrap.getBoundingClientRect()
+        // 目标：该列居中于 wrap
+        const targetScroll = wrap.scrollLeft + (rect.left - wrapRect.left) - (wrapRect.width / 2 - rect.width / 2)
+        wrap.scrollTo({ left: Math.max(0, targetScroll), behavior: 'smooth' })
+        break
+      }
+    }
+  })
 }
 function rangeNights() {
   const rs = rangeSelected.value
