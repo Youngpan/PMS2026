@@ -35,10 +35,21 @@
           <el-icon><User /></el-icon>
           <span>系统</span>
         </el-menu-item>
-        <el-menu-item index="/ota/accounts">
-          <el-icon><Connection /></el-icon>
-          <span>OTA 直连</span>
-        </el-menu-item>
+        <el-sub-menu index="/ota">
+          <template #title>
+            <el-icon><Connection /></el-icon>
+            <span>OTA 直连</span>
+          </template>
+          <el-menu-item index="/ota/accounts">
+            <span>账号管理</span>
+          </el-menu-item>
+          <el-menu-item index="/ota/listings">
+            <span>房源关联</span>
+          </el-menu-item>
+          <el-menu-item index="/ota/conflicts">
+            <span>冲突订单</span>
+          </el-menu-item>
+        </el-sub-menu>
       </el-menu>
     </aside>
 

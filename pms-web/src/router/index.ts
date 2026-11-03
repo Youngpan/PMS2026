@@ -17,6 +17,8 @@ const routes: RouteRecordRaw[] = [
       { path: 'reports', name: 'reports', component: () => import('@/views/ReportIndex.vue'), meta: { title: '夜审与报表' } },
       { path: 'system/staff', name: 'system-staff', component: () => import('@/views/SystemStaff.vue'), meta: { title: '员工管理' } },
       { path: 'ota/accounts', name: 'ota-accounts', component: () => import('@/views/OtaAccounts.vue'), meta: { title: 'OTA 账号' } },
+      { path: 'ota/listings', name: 'ota-listings', component: () => import('@/views/ChannelListings.vue'), meta: { title: '房源关联' } },
+      { path: 'ota/conflicts', name: 'ota-conflicts', component: () => import('@/views/ConflictOrders.vue'), meta: { title: '冲突订单' } },
     ],
   },
 ]

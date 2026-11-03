@@ -50,6 +50,7 @@ public class HousekeepingService {
     private final ChannelMapper channelMapper;
     private final RoomStatusPublisher publisher;
     private final OtaEventPublisher otaEventPublisher;
+    private final com.pms.module.ota.ChannelListingService channelListingService;
 
     @Value("${pms.hotel.id}")
     private Long hotelId;
@@ -437,6 +438,15 @@ public class HousekeepingService {
         roomBlockMapper.insert(b);
         otaEventPublisher.publish(OtaEvent.RefType.ROOM_AVAILABILITY, roomId, "BLOCKED", null,
                 Map.of("roomId", roomId, "start", start.toString(), "end", end.toString(), "reason", reason == null ? "" : reason));
+        // 下行同步：本地关房推送到已关联渠道
+        LocalDate tmp = start;
+        while (!tmp.isAfter(end)) {
+            if (r.getRoomTypeId() != null) {
+                channelListingService.notifyRoomStatusChange("ROOM_TYPE", r.getRoomTypeId(), tmp, true);
+            }
+            channelListingService.notifyRoomStatusChange("ROOM", roomId, tmp, true);
+            tmp = tmp.plusDays(1);
+        }
         return b;
     }
 
@@ -451,6 +461,18 @@ public class HousekeepingService {
         roomBlockMapper.updateById(b);
         otaEventPublisher.publish(OtaEvent.RefType.ROOM_AVAILABILITY, b.getRoomId(), "RELEASED", null,
                 Map.of("roomId", b.getRoomId(), "start", b.getStartDate().toString(), "end", b.getEndDate().toString()));
+        // 下行同步：本地开房推送到已关联渠道
+        Room r = roomMapper.selectById(b.getRoomId());
+        if (r != null) {
+            LocalDate tmp = b.getStartDate();
+            while (!tmp.isAfter(b.getEndDate())) {
+                if (r.getRoomTypeId() != null) {
+                    channelListingService.notifyRoomStatusChange("ROOM_TYPE", r.getRoomTypeId(), tmp, false);
+                }
+                channelListingService.notifyRoomStatusChange("ROOM", b.getRoomId(), tmp, false);
+                tmp = tmp.plusDays(1);
+            }
+        }
         return b;
     }
 

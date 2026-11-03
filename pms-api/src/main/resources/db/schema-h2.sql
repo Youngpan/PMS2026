@@ -338,6 +338,49 @@ CREATE TABLE interface_log (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+DROP TABLE IF EXISTS channel_listing;
+CREATE TABLE channel_listing (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  hotel_id BIGINT NOT NULL,
+  ota_account_id BIGINT NOT NULL,
+  platform VARCHAR(32) NOT NULL,
+  channel_listing_id VARCHAR(128) NOT NULL,
+  channel_listing_name VARCHAR(255),
+  target_type VARCHAR(16) NOT NULL,
+  room_id BIGINT,
+  room_type_id BIGINT,
+  inventory_type VARCHAR(16) DEFAULT 'INDEPENDENT',
+  status VARCHAR(16) DEFAULT 'ACTIVE',
+  operator_id BIGINT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+DROP TABLE IF EXISTS conflict_order;
+CREATE TABLE conflict_order (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  hotel_id BIGINT NOT NULL,
+  ota_account_id BIGINT,
+  platform VARCHAR(32),
+  channel_order_id VARCHAR(128),
+  guest_name VARCHAR(50),
+  guest_phone VARCHAR(32),
+  check_in_date DATE,
+  check_out_date DATE,
+  nights INT,
+  room_id BIGINT,
+  room_type_id BIGINT,
+  conflict_type VARCHAR(32) NOT NULL,
+  conflict_detail VARCHAR(500),
+  status VARCHAR(16) DEFAULT 'PENDING',
+  resolution VARCHAR(500),
+  handler_id BIGINT,
+  handled_at TIMESTAMP NULL,
+  operator_id BIGINT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 DROP TABLE IF EXISTS ota_account;
 CREATE TABLE ota_account (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,

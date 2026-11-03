@@ -46,6 +46,26 @@ export const otaApi = {
     request.put(`/ota/accounts/${id}/server-config`, { config }),
 }
 
+// ---------- 渠道房源关联 ----------
+export const listingApi = {
+  listByAccount: (accountId: number) =>
+    request.get(`/ota/accounts/${accountId}/listings`),
+  listAll: () => request.get('/ota/listings/all'),
+  listByRoom: (roomId: number) =>
+    request.get(`/ota/listings/by-room/${roomId}`),
+  listByRoomType: (roomTypeId: number) =>
+    request.get(`/ota/listings/by-room-type/${roomTypeId}`),
+  bind: (data: any) => request.post('/ota/listings', data),
+  unbind: (id: number) => request.delete(`/ota/listings/${id}`),
+}
+
+// ---------- 冲突订单盒子 ----------
+export const conflictApi = {
+  listPending: () => request.get('/ota/conflicts/pending'),
+  resolve: (id: number, resolution: string, status?: string) =>
+    request.put(`/ota/conflicts/${id}/resolve`, { resolution, status }),
+}
+
 // ---------- 预订 ----------
 export const reservationApi = {
   list: (params: any) => request.get('/reservations', { params }),
