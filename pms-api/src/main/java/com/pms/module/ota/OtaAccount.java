@@ -52,6 +52,8 @@ public class OtaAccount {
     // ---- 同步 ----
     /** 最近一次同步时间 */
     private LocalDateTime lastSyncAt;
+    /** 增量水位线，存储最大订单时间作为下界（例：2026-11-03T12:00） */
+    private String pageWatermark;
 
     // ---- 自动重连 ----
     /** 开启自动重连: 1是 / 0否 */

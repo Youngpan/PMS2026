@@ -383,6 +383,37 @@ CREATE TABLE conflict_order (
   INDEX idx_created (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='冲突订单盒子';
 
+DROP TABLE IF EXISTS channel_order;
+CREATE TABLE channel_order (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  hotel_id BIGINT NOT NULL,
+  ota_account_id BIGINT NOT NULL COMMENT '来源OTA账号',
+  platform VARCHAR(32) NOT NULL COMMENT '平台: CTRIP/MEITUAN/DOUYIN',
+  channel_order_id VARCHAR(128) NOT NULL COMMENT '渠道侧订单号',
+  source_type VARCHAR(32) NOT NULL DEFAULT 'Ebooking' COMMENT '订单来源类型',
+  guest_name VARCHAR(100) COMMENT '客人姓名(脱敏)',
+  guest_phone VARCHAR(32) COMMENT '客人电话(脱敏)',
+  check_in_date DATE COMMENT '入住日期',
+  check_out_date DATE COMMENT '离店日期',
+  nights INT COMMENT '入住晚数',
+  persons INT COMMENT '入住人数',
+  room_type_name VARCHAR(100) COMMENT '渠道房型名称',
+  room_count INT DEFAULT 1 COMMENT '预订房间数',
+  total_amount DECIMAL(12,2) COMMENT '订单总额',
+  currency VARCHAR(8) DEFAULT 'CNY',
+  channel_status VARCHAR(32) COMMENT '渠道侧订单状态: Receipt/CheckIn/Canceled',
+  raw_json JSON COMMENT '原始接口JSON快照',
+  process_status VARCHAR(20) DEFAULT 'RAW' COMMENT 'RAW未处理/PROCESSED已落单/DUPLICATE重复/FAILED处理失败',
+  processed_at TIMESTAMP NULL COMMENT '落单时间',
+  local_reservation_id BIGINT COMMENT '落单后的百居易预订ID',
+  error_msg VARCHAR(500) COMMENT '处理失败原因',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_order_source (channel_order_id, source_type),
+  INDEX idx_account_status (ota_account_id, process_status),
+  INDEX idx_hotel_created (hotel_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='渠道订单拉取暂存表';
+
 DROP TABLE IF EXISTS ota_account;
 CREATE TABLE ota_account (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -400,6 +431,7 @@ CREATE TABLE ota_account (
   offline_reason VARCHAR(255) DEFAULT NULL COMMENT '掉线原因',
   last_error VARCHAR(500) COMMENT '最近错误信息',
   last_sync_at TIMESTAMP NULL COMMENT '最近一次同步时间',
+  page_watermark VARCHAR(50) DEFAULT NULL COMMENT '增量水位线,存储最大订单时间作为下界',
   auto_reconnect TINYINT DEFAULT 1 COMMENT '开启自动重连:1是/0否',
   retry_count INT DEFAULT 0 COMMENT '当前退避重试次数',
   next_retry_at TIMESTAMP NULL COMMENT '下次自动重试时间',

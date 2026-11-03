@@ -381,6 +381,34 @@ CREATE TABLE conflict_order (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+DROP TABLE IF EXISTS channel_order;
+CREATE TABLE channel_order (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  hotel_id BIGINT NOT NULL,
+  ota_account_id BIGINT NOT NULL,
+  platform VARCHAR(32) NOT NULL,
+  channel_order_id VARCHAR(128) NOT NULL,
+  source_type VARCHAR(32) NOT NULL DEFAULT 'Ebooking',
+  guest_name VARCHAR(100),
+  guest_phone VARCHAR(32),
+  check_in_date DATE,
+  check_out_date DATE,
+  nights INT,
+  persons INT,
+  room_type_name VARCHAR(100),
+  room_count INT DEFAULT 1,
+  total_amount DECIMAL(12,2),
+  currency VARCHAR(8) DEFAULT 'CNY',
+  channel_status VARCHAR(32),
+  raw_json TEXT,
+  process_status VARCHAR(20) DEFAULT 'RAW',
+  processed_at TIMESTAMP NULL,
+  local_reservation_id BIGINT,
+  error_msg VARCHAR(500),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 DROP TABLE IF EXISTS ota_account;
 CREATE TABLE ota_account (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -398,6 +426,7 @@ CREATE TABLE ota_account (
   offline_reason VARCHAR(255),
   last_error VARCHAR(500),
   last_sync_at TIMESTAMP NULL,
+  page_watermark VARCHAR(50) DEFAULT NULL,
   auto_reconnect TINYINT DEFAULT 1,
   retry_count INT DEFAULT 0,
   next_retry_at TIMESTAMP NULL,

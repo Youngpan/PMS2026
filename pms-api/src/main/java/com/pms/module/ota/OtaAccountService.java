@@ -381,6 +381,14 @@ public class OtaAccountService {
                 .le(OtaAccount::getNextRetryAt, LocalDateTime.now()));
     }
 
+    /**
+     * 更新水位线（由 PollingScheduler 调用）
+     */
+    public void updateAccountWatermark(OtaAccount acc) {
+        acc.setUpdatedAt(LocalDateTime.now());
+        otaAccountMapper.updateById(acc);
+    }
+
     // ==================== 占位实现：真实对接时替换 ====================
 
     /**
