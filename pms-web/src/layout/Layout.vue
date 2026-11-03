@@ -35,6 +35,10 @@
           <el-icon><User /></el-icon>
           <span>系统</span>
         </el-menu-item>
+        <el-menu-item index="/ota/accounts">
+          <el-icon><Connection /></el-icon>
+          <span>OTA 直连</span>
+        </el-menu-item>
       </el-menu>
     </aside>
 
@@ -62,7 +66,7 @@
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { authApi } from '@/api/modules'
-import { Odometer, Brush, Calendar, House, Grid, DataAnalysis, User } from '@element-plus/icons-vue'
+import { Odometer, Brush, Calendar, House, Grid, DataAnalysis, User, Connection } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()

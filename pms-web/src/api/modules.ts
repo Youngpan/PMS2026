@@ -31,6 +31,18 @@ export const channelApi = {
   list: () => request.get('/channels'),
 }
 
+// ---------- OTA 账号直连 ----------
+export const otaApi = {
+  list: (platform?: string) => request.get('/ota/accounts', { params: { platform } }),
+  create: (data: any) => request.post('/ota/accounts', data),
+  update: (id: number, data: any) => request.put(`/ota/accounts/${id}`, data),
+  remove: (id: number) => request.delete(`/ota/accounts/${id}`),
+  toggleEnabled: (id: number, enabled: number) =>
+    request.put(`/ota/accounts/${id}/enabled`, { enabled }),
+  testConnection: (id: number) => request.post(`/ota/accounts/${id}/test`),
+  sync: (id: number) => request.post(`/ota/accounts/${id}/sync`),
+}
+
 // ---------- 预订 ----------
 export const reservationApi = {
   list: (params: any) => request.get('/reservations', { params }),

@@ -338,6 +338,25 @@ CREATE TABLE interface_log (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+DROP TABLE IF EXISTS ota_account;
+CREATE TABLE ota_account (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  hotel_id BIGINT NOT NULL,
+  platform VARCHAR(32) NOT NULL,
+  account_name VARCHAR(128) NOT NULL,
+  password VARCHAR(255) NOT NULL,
+  merchant_id VARCHAR(128),
+  app_key VARCHAR(255),
+  app_secret VARCHAR(255),
+  status VARCHAR(16) DEFAULT 'DISCONNECTED',
+  last_sync_at TIMESTAMP NULL,
+  last_error VARCHAR(500),
+  enabled TINYINT DEFAULT 1,
+  operator_id BIGINT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- ---------- 初始数据 ----------
 INSERT INTO hotel (id, name, code, default_deposit, checkout_time) VALUES (1, '示例酒店', 'DEMO', 500, '12:00');
 INSERT INTO staff (hotel_id, username, password_hash, real_name, status) VALUES (1, 'admin', 'bcrypt-placeholder', '管理员', 1);

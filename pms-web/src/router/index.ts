@@ -16,6 +16,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'folios/:id', name: 'folio', component: () => import('@/views/FolioDetail.vue'), meta: { title: '账单' } },
       { path: 'reports', name: 'reports', component: () => import('@/views/ReportIndex.vue'), meta: { title: '夜审与报表' } },
       { path: 'system/staff', name: 'system-staff', component: () => import('@/views/SystemStaff.vue'), meta: { title: '员工管理' } },
+      { path: 'ota/accounts', name: 'ota-accounts', component: () => import('@/views/OtaAccounts.vue'), meta: { title: 'OTA 账号' } },
     ],
   },
 ]
