@@ -29,12 +29,12 @@
             <span>房间管理</span>
           </template>
           <el-menu-item index="/rooms">
-            <span>房型与房号</span>
+            <span>房间号</span>
           </el-menu-item>
-          <el-sub-menu index="/ota">
+          <el-sub-menu index="/ota-room-type">
             <template #title>
               <el-icon><Connection /></el-icon>
-              <span>OTA 直连</span>
+              <span>OTA 房型</span>
             </template>
             <el-menu-item index="/ota/accounts">
               <span>账号管理</span>
@@ -55,21 +55,6 @@
           <el-icon><User /></el-icon>
           <span>系统</span>
         </el-menu-item>
-        <el-sub-menu index="/ota">
-          <template #title>
-            <el-icon><Connection /></el-icon>
-            <span>OTA 直连</span>
-          </template>
-          <el-menu-item index="/ota/accounts">
-            <span>账号管理</span>
-          </el-menu-item>
-          <el-menu-item index="/ota/listings">
-            <span>房源关联</span>
-          </el-menu-item>
-          <el-menu-item index="/ota/conflicts">
-            <span>冲突订单</span>
-          </el-menu-item>
-        </el-sub-menu>
       </el-menu>
     </aside>
 
