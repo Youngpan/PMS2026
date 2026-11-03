@@ -36,10 +36,10 @@
               <el-icon><Connection /></el-icon>
               <span>OTA 房型</span>
             </template>
-            <el-menu-item index="/ota/accounts">
-              <span>账号管理</span>
-            </el-menu-item>
-            <el-menu-item index="/ota/listings">
+              <el-menu-item index="/ota/products">
+                <span>房型管理</span>
+              </el-menu-item>
+              <el-menu-item index="/ota/listings">
               <span>房源关联</span>
             </el-menu-item>
             <el-menu-item index="/ota/conflicts">

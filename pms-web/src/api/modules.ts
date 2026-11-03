@@ -46,7 +46,7 @@ export const otaApi = {
     request.put(`/ota/accounts/${id}/server-config`, { config }),
 }
 
-// ---------- 渠道房源关联 ----------
+// ---------- OTA 房源关联 ----------
 export const listingApi = {
   listByAccount: (accountId: number) =>
     request.get(`/ota/accounts/${accountId}/listings`),
@@ -57,6 +57,21 @@ export const listingApi = {
     request.get(`/ota/listings/by-room-type/${roomTypeId}`),
   bind: (data: any) => request.post('/ota/listings', data),
   unbind: (id: number) => request.delete(`/ota/listings/${id}`),
+}
+
+// ---------- OTA 房型（产品） ----------
+export const productApi = {
+  list: (otaAccountId?: number | null) => {
+    const params: any = {}
+    if (otaAccountId) params.otaAccountId = otaAccountId
+    return request.get('/ota/products', { params })
+  },
+  get: (id: number) => request.get(`/ota/products/${id}`),
+  create: (data: any) => request.post('/ota/products', data),
+  update: (id: number, data: any) => request.put(`/ota/products/${id}`, data),
+  remove: (id: number) => request.delete(`/ota/products/${id}`),
+  toggleStatus: (id: number, status: string) =>
+    request.put(`/ota/products/${id}/status`, { status }),
 }
 
 // ---------- 冲突订单盒子 ----------
