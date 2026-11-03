@@ -3,6 +3,9 @@ package com.pms.module.ota;
 import cn.hutool.core.util.HexUtil;
 import cn.hutool.crypto.SecureUtil;
 import cn.hutool.crypto.symmetric.AES;
+import cn.hutool.json.JSONArray;
+import cn.hutool.json.JSONObject;
+import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.pms.common.BusinessException;
 import com.pms.module.system.OperationLog;
@@ -14,7 +17,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
 
@@ -39,6 +44,10 @@ public class OtaAccountService {
 
     private final OtaAccountMapper otaAccountMapper;
     private final OperationLogMapper operationLogMapper;
+    private final ChannelOrderMapper channelOrderMapper;
+    private final ChannelListingMapper channelListingMapper;
+    private final ChannelListingService channelListingService;
+    private final CtripApiClient ctripClient;
 
     @Value("${pms.hotel.id}")
     private Long hotelId;
@@ -399,15 +408,161 @@ public class OtaAccountService {
         // CTRIP → 携程 EBK 登录接口
         // MEITUAN → 美团商家中心登录
         // DOUYIN → 抖音来客登录
+        if ("CTRIP".equals(acc.getPlatform())) {
+            return ctripClient.doLogin(acc.getAccountName(), decryptToken(acc.getPassword()));
+        }
         return "mock_session_token_" + UUID.randomUUID().toString().substring(0, 16);
     }
 
     private void doKeepaliveRequest(String platform, String token) {
-        // TODO: 调用渠道轻量保活接口
+        if ("CTRIP".equals(platform)) {
+            ctripClient.keepaliveRequest(token);
+        }
     }
 
-    private void doFetchOrdersRequest(OtaAccount acc) {
-        // TODO: 拉取最近的订单
+    /**
+     * FR-09：拉取最近的订单（增量化拉取 + 水位线）
+     * 由 fetchOrders / OtaPollingScheduler 调用
+     */
+    public void doFetchOrdersRequest(OtaAccount acc) {
+        if (!"CTRIP".equals(acc.getPlatform())) {
+            // 目前只实现了携程
+            return;
+        }
+
+        String token = decryptToken(acc.getSessionToken());
+        String watermark = acc.getPageWatermark();
+        int pageIndex = 0;
+        boolean hasMore = true;
+        String latestFormDate = null;
+
+        while (hasMore) {
+            JSONArray ordersJson;
+            try {
+                ordersJson = ctripClient.queryOrderList(token, pageIndex, 20);
+            } catch (Exception e) {
+                log.warn("[OTA] 拉取订单页失败 accountId={}, page={}, err={}", acc.getId(), pageIndex, e.getMessage());
+                if (e.getMessage() != null && e.getMessage().contains("登录凭证已过期")) {
+                    markOffline(acc, "拉单时检测到登录态失效: " + e.getMessage());
+                }
+                hasMore = false;
+                break;
+            }
+
+            if (ordersJson == null || ordersJson.isEmpty()) {
+                hasMore = false;
+                break;
+            }
+
+            for (Object obj : ordersJson) {
+                JSONObject item = (JSONObject) obj;
+
+                ChannelOrder order = new ChannelOrder();
+                order.setHotelId(acc.getHotelId());
+                order.setOtaAccountId(acc.getId());
+                order.setPlatform(acc.getPlatform());
+                order.setSourceType("Ebooking");
+                order.setChannelOrderId(item.getStr("orderId"));
+                order.setGuestName(item.getStr("clientName"));
+                order.setChannelStatus(item.getStr("orderStatusType"));
+
+                String arrival = item.getStr("arrival");
+                String departure = item.getStr("departure");
+                if (arrival != null) {
+                    order.setCheckInDate(LocalDate.parse(arrival.substring(0, 10)));
+                }
+                if (departure != null) {
+                    order.setCheckOutDate(LocalDate.parse(departure.substring(0, 10)));
+                }
+                if (order.getCheckInDate() != null && order.getCheckOutDate() != null) {
+                    order.setNights((int) java.time.temporal.ChronoUnit.DAYS.between(order.getCheckInDate(), order.getCheckOutDate()));
+                }
+
+                JSONObject personInfo = item.getJSONObject("personCountInfo");
+                if (personInfo != null) {
+                    Integer adult = personInfo.getInt("adult");
+                    Integer child = personInfo.getInt("child");
+                    order.setPersons((adult != null ? adult : 0) + (child != null ? child : 0));
+                }
+
+                order.setRoomTypeName(item.getStr("roomTypeName"));
+                String total = item.getStr("totalPrice");
+                if (total != null && !total.isEmpty()) {
+                    order.setTotalAmount(new java.math.BigDecimal(total));
+                }
+
+                // 从 channel_listing 获取关联的房间/房型ID
+                try {
+                    ChannelListing cl = channelListingMapper.selectOne(
+                            new LambdaQueryWrapper<ChannelListing>()
+                                    .eq(ChannelListing::getOtaAccountId, acc.getId())
+                                    .eq(ChannelListing::getChannelListingId, order.getChannelOrderId())
+                                    .eq(ChannelListing::getStatus, "ACTIVE"));
+                    if (cl != null) {
+                        order.setRoomId(cl.getRoomId());
+                        order.setRoomTypeId(cl.getRoomTypeId());
+                    }
+                } catch (Exception ignored) {}
+
+                order.setRawJson(item.toString());
+                order.setProcessStatus("RAW");
+                order.setCreatedAt(LocalDateTime.now());
+
+                try {
+                    channelOrderMapper.insert(order);
+                    latestFormDate = arrival != null ? arrival.substring(0, 10) + "T00:00:00"
+                            : LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"));
+                } catch (Exception e) {
+                    log.debug("[OTA] 订单已存在 accountId={}, orderId={}", acc.getId(), order.getChannelOrderId());
+                    hasMore = false;
+                    break;
+                }
+
+                tryProcessOrder(acc, order);
+            }
+
+            pageIndex++;
+        }
+
+        if (latestFormDate != null) {
+            acc.setPageWatermark(latestFormDate);
+            acc.setLastSyncAt(LocalDateTime.now());
+            otaAccountMapper.updateById(acc);
+        }
+    }
+
+    private void tryProcessOrder(OtaAccount acc, ChannelOrder order) {
+        if (!"RAW".equals(order.getProcessStatus())) return;
+
+        try {
+            // TODO: 调用 ReservationService 创建预订
+            // reservationService.createFromChannelOrder(order);
+
+            List<ChannelListing> listings = channelListingMapper.selectList(
+                    new LambdaQueryWrapper<ChannelListing>()
+                            .eq(ChannelListing::getOtaAccountId, acc.getId())
+                            .eq(ChannelListing::getStatus, "ACTIVE"));
+            for (ChannelListing cl : listings) {
+                if (cl.getOtaAccountId().equals(acc.getId())) continue;
+                channelListingService.autoCloseOtherChannels(
+                        cl.getRoomId(),
+                        cl.getRoomTypeId(),
+                        order.getCheckInDate(),
+                        order.getCheckOutDate(),
+                        acc.getId()
+                );
+            }
+
+            order.setProcessStatus("PROCESSED");
+            order.setProcessedAt(LocalDateTime.now());
+            channelOrderMapper.updateById(order);
+            log.info("[OTA] 订单落单成功 accountId={}, orderId={}", acc.getId(), order.getChannelOrderId());
+        } catch (Exception e) {
+            order.setProcessStatus("FAILED");
+            order.setErrorMsg(e.getMessage() != null ? e.getMessage().substring(0, Math.min(e.getMessage().length(), 500)) : "未知错误");
+            channelOrderMapper.updateById(order);
+            log.warn("[OTA] 订单落单失败 accountId={}, orderId={}, err={}", acc.getId(), order.getChannelOrderId(), e.getMessage());
+        }
     }
 
     private void doFullSyncRequest(OtaAccount acc) {

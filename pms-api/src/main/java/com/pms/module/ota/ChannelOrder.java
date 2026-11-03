@@ -36,6 +36,10 @@ public class ChannelOrder {
     private Integer persons;
     /** 渠道房型名称 */
     private String roomTypeName;
+    /** 从渠道侧获取的关联房间ID */
+    private Long roomId;
+    /** 从渠道侧获取的关联房型ID */
+    private Long roomTypeId;
     /** 预订房间数 */
     private Integer roomCount;
     /** 订单总额 */
