@@ -34,13 +34,16 @@ export const channelApi = {
 // ---------- OTA 账号直连 ----------
 export const otaApi = {
   list: (platform?: string) => request.get('/ota/accounts', { params: { platform } }),
-  create: (data: any) => request.post('/ota/accounts', data),
+  bind: (data: any) => request.post('/ota/accounts', data),
   update: (id: number, data: any) => request.put(`/ota/accounts/${id}`, data),
-  remove: (id: number) => request.delete(`/ota/accounts/${id}`),
+  login: (id: number) => request.post(`/ota/accounts/${id}/login`),
+  unbind: (id: number) => request.delete(`/ota/accounts/${id}`),
   toggleEnabled: (id: number, enabled: number) =>
     request.put(`/ota/accounts/${id}/enabled`, { enabled }),
-  testConnection: (id: number) => request.post(`/ota/accounts/${id}/test`),
-  sync: (id: number) => request.post(`/ota/accounts/${id}/sync`),
+  fetchOrders: (id: number) => request.post(`/ota/accounts/${id}/fetch-orders`),
+  fullSync: (id: number) => request.post(`/ota/accounts/${id}/full-sync`),
+  updateServerConfig: (id: number, config: string) =>
+    request.put(`/ota/accounts/${id}/server-config`, { config }),
 }
 
 // ---------- 预订 ----------

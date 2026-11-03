@@ -3,6 +3,12 @@ server:
   servlet:
     context-path: /api/v1
 
+logging:
+  file:
+    name: target/app.log
+  level:
+    com.pms: DEBUG
+
 spring:
   application:
     name: pms-api
