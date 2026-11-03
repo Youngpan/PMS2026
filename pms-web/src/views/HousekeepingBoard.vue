@@ -556,16 +556,12 @@ function rangeCloseRoom() {
     })
     return
   }
-  ElMessageBox.prompt('封房原因（可选）', `封房 ${rs.room.number} · ${rs.start} → ${rs.end}`, {
-    inputPlaceholder: '如：维修、自用',
-    confirmButtonText: '确认封房',
-    cancelButtonText: '取消',
-    inputValue: '',
-  }).then(async ({ value }) => {
-    await housekeepingApi.blockRoom(rs.room.id, rs.start, rs.end, value || undefined)
-    ElMessage.success('已封房（该日期段关闭）')
+  // 关房只针对选中的日期范围（start 到 end-1，即最后一晚）
+  const lastNight = addDays(rs.end, -1)
+  housekeepingApi.blockRoom(rs.room.id, rs.start, lastNight).then(() => {
+    ElMessage.success('已关房')
     load()
-  }).catch(() => {})
+  })
 }
 
 /** 释放封房：恢复该房所选日期的可售。 */
